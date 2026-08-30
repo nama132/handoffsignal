@@ -13,8 +13,10 @@ schema, not a judgement:
 * `customer` and `contract` reach their sites through multi-valued relations and may
   cover several, so they stay hidden rather than being attributed by guess.
 * `accounting_invoice` and `accounting_payment` do each resolve to one site, but are
-  deliberately still hidden: a supervisor holds no finance role. That conservatism is
-  asserted below so it cannot drift unnoticed, and is recorded as an open decision.
+  deliberately still hidden: an accounting record is finance-domain by virtue of what
+  it is, and a supervisor holds no finance role. That is a settled product-policy
+  boundary rather than a schema limit, and it is asserted below so it cannot erode by
+  accident.
 
 All seven subject types are represented in the fixture.
 
@@ -301,13 +303,14 @@ class TestAllSevenSubjectTypesAreCovered:
 
 
 class TestAccountingSubjectsRemainHidden:
-    """A recorded conservatism, not a schema limit -- so it cannot drift unnoticed.
+    """A settled product-policy boundary, not a schema limit -- so it cannot erode.
 
     `AccountingInvoice.site` is a single foreign key, and a payment reaches a site through
     its invoice, so both DO resolve unambiguously to one site. They are nonetheless not
     matched by the site filter: a supervisor holds no finance role, and an issue whose
     subject is an accounting record is finance's to see even when its field group is
-    operational. Whether to widen this is an owner decision, recorded in the ledger.
+    operational. The owner has settled that boundary: the domain of the subject decides,
+    not the domain of the field group, and no selector branch is to be added for either.
     """
 
     def _visible(self, atlas):  # type: ignore[no-untyped-def]
