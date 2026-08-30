@@ -7,6 +7,7 @@ financial logic lives here. Cross-tenant lookups return 404 (section 17, rule 8)
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -27,6 +28,7 @@ from apps.ingestion import selectors as ingestion_selectors
 from apps.organizations.models import Membership
 from apps.organizations.policy import Denied, allows, effective_site_scope, require
 from apps.organizations.roles import Action, Role
+from apps.recovery import selectors as recovery_selectors
 
 
 def _require_membership(request: HttpRequest) -> Membership:
@@ -60,13 +62,26 @@ def cockpit(request: HttpRequest) -> HttpResponse:
     open_cases = selectors.cases_for_organization(
         organization_id, limit_to_site_ids=site_scope
     ).filter(state__in=selectors.OPEN_STATES)
+
+    # Every number below is scoped by the SAME `site_scope`. The previous version scoped
+    # the headline and the recent-case list but not the severity tiles or the money, so a
+    # supervisor holding zero grants read "Open cases: 0" beside "Medium: 1" and an
+    # organization-wide candidate total. A page that contradicts itself is the visible
+    # symptom; the leak is that the second number was never the reader's to see.
+    raw_stages = recovery_selectors.stage_totals(organization_id, limit_to_site_ids=site_scope)
+    stages = {
+        key: financial.to_cents(value) if isinstance(value, Decimal) else value
+        for key, value in raw_stages.items()
+    }
     return render(
         request,
         "exceptions/cockpit.html",
         {
-            "counts_by_severity": selectors.open_case_counts(organization_id),
+            "counts_by_severity": selectors.open_case_counts(
+                organization_id, limit_to_site_ids=site_scope
+            ),
             "open_case_count": open_cases.count(),
-            "stages": financial.stage_totals(organization_id),
+            "stages": stages,
             "freshness": ingestion_selectors.source_freshness(organization_id),
             "unresolved_identities": ingestion_selectors.open_identity_issues(
                 organization_id

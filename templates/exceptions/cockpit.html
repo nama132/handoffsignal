@@ -18,6 +18,15 @@
   <h2 id="money-heading">Financial stages</h2>
   <p class="help">Four separate facts. They are never added together, and none of them is
   "recovered revenue".</p>
+  {% if stages.mixed_currency %}
+    <p class="help"><strong>More than one currency is in view.</strong> The totals below are
+    withheld because adding different currencies together would produce a number that means
+    nothing. The per-item values on the recovery ledger remain exact.</p>
+  {% endif %}
+  {% if stages.disputed_excluded %}
+    <p class="help"><strong>{{ stages.disputed_excluded }}</strong> item(s) are excluded from
+    the confirmed columns because a dispute is open against the accounting source.</p>
+  {% endif %}
   <dl class="tiles">
     <div class="tile"><dt>Candidate value</dt>
       <dd>{% if stages.candidate is not None %}${{ stages.candidate }}{% else %}<span class="muted">none</span>{% endif %}</dd>

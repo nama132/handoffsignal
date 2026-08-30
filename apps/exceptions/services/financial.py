@@ -78,11 +78,21 @@ def record_candidate(
 
 
 def stage_totals(organization_id) -> dict[str, Decimal | None]:
-    """The four financial stages, kept separate and never summed (section 26).
+    """RETIRED. Superseded by `apps.recovery.selectors.stage_totals`.
+
+    This is the Phase 4 selector. It has **no site-scope parameter**, so wiring it to any
+    reader-facing view reintroduces the leak that Phase 2 of the demo-to-outreach plan
+    closed: it aggregates every recovery item in the organization regardless of who is
+    asking. It also reports only `candidate`, because the other three stages did not
+    exist when it was written.
+
+    It is kept for one reason: `tests/test_cockpit_scope.py` uses it to demonstrate the
+    behavioural difference against its replacement, which counts items whose exception
+    case is no longer open. **Do not call it from application code.** The supported
+    selector takes `limit_to_site_ids` and returns all four stages.
 
     Phase 4 can populate `candidate` only, from each open case's CURRENT candidate
-    snapshot. The other three are returned as None - meaning "no data", not zero - so
-    the cockpit labels them honestly rather than showing a misleading $0.
+    snapshot. The other three are returned as None - meaning "no data", not zero.
     """
     open_states = ["new", "acknowledged", "action_pending", "waiting_external", "escalated"]
     items = FinancialRecoveryItem.objects.filter(

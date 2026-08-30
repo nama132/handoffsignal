@@ -55,14 +55,23 @@ def get_case_or_none(
     ).first()
 
 
-def open_case_counts(organization_id: uuid.UUID) -> dict[str, int]:
+def open_case_counts(
+    organization_id: uuid.UUID, *, limit_to_site_ids: set[uuid.UUID] | None = None
+) -> dict[str, int]:
+    """Open-case counts by severity, honouring the caller's site scope.
+
+    `limit_to_site_ids` is the same three-valued contract `cases_for_organization` uses:
+    `None` means tenant-wide, a set means exactly those sites, and the **empty set means
+    no sites at all**. The empty set must reach `filter(id__in=set())` verbatim so it
+    yields nothing -- collapsing it to "no filter" is precisely the leak this parameter
+    exists to close.
+    """
     from django.db.models import Count
 
-    rows = (
-        ExceptionCase.objects.filter(organization_id=organization_id, state__in=OPEN_STATES)
-        .values("severity")
-        .annotate(n=Count("id"))
-    )
+    queryset = ExceptionCase.objects.filter(organization_id=organization_id, state__in=OPEN_STATES)
+    if limit_to_site_ids is not None:
+        queryset = queryset.filter(work_order__site_id__in=limit_to_site_ids)
+    rows = queryset.values("severity").annotate(n=Count("id"))
     counts = dict.fromkeys(Severity.values, 0)
     for row in rows:
         counts[row["severity"]] = row["n"]

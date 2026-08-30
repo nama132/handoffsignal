@@ -15,7 +15,7 @@ subsequent wording may be recorded as `owner_approved`** (plan §4.4). Allowed v
 | 1B — Initial local commit | complete_pending_owner_review | "Go ahead, I Approve Phase 1B - Initiial local commit" | 230 staged and committed | 859 pass / 0 fail, 88%, run **from the staged state** | Baseline created. Local only; no remote exists. | `416a727` |
 | 1B.1 — Ignore the excluded specification | complete_pending_owner_review | "Add .gitignore" | 1 (`.gitignore`) | n/a — ignore rule only | The governing specification can no longer be swept in by a blind `git add .`. It remains on disk and untracked. | `9dbfc2b` |
 | 1C — Private remote | complete_pending_owner_review | "I also approve phase 1c - private remote" | none — remote configuration only | verified remote tree = 231 files, identical to local | Private repo `nama132/handoffsignal` created and verified private BEFORE the push. Branch `v2-commercial-cleaning` pushed with upstream tracking; remote SHA matches local. No tags, no other branch, no webhook, no deploy key, no environment, no autodeploy. Branch protection **unavailable** — GitHub Pro is required for rulesets on a private repository, and the repository was deliberately NOT made public to obtain it. | `37947a1` |
-| 2 — Cockpit site scope | not_started | — | — | — | F-N1 reproduced during 1A and re-confirmed by the pre-commit audit. | — |
+| 2 — Cockpit site scope | complete_pending_owner_review | "I Approve Phase 2 - Cockpit Site Scope" | 4 changed, 2 test modules added | 863 non-browser + 20 browser pass, 88% | F-N1 closed. Every number on `/app/` is now scoped by the same `effective_site_scope`. Proven non-vacuous: reverting the fix fails 5 tests. A four-lens audit of the whole defect class found **no other live leak**. A structural guard now classifies every selector. | pending |
 | 3 — Four-stage cockpit | not_started | — | — | — | F-N2 reproduced during 1A. | — |
 | 4 — Relative demo clock | not_started | — | — | — | F-N6 outstanding. | — |
 | 5 — Secure demo accounts | not_started | — | — | — | F-N3 outstanding. **Hard gate before any hosting.** | — |
@@ -68,7 +68,25 @@ clarification had always applied.
 4. **Three committed documents state as present-tense fact that the repository has no
    commits.** This commit falsifies them. To be corrected when those documents are next
    touched.
-5. **The baseline branch has no force-push or deletion protection.** GitHub requires a Pro
+5. **`open_reconciliation_issues` is unscoped and IS site-addressable.** Unlike an identity
+   issue, a `ReconciliationIssue` names a typed canonical subject that can be a site or a
+   work order, yet the reconciliation queue renders every open issue in the organization to
+   any reader holding `VIEW_ORGANIZATION`. Left unchanged: the plan's section 7.4 task 10
+   requires an explicit product decision rather than a silent redesign. Recorded in
+   `tests/test_site_scope_contract.py` so it cannot be forgotten.
+6. **`reconciliation_resolve` looks the object up before checking the role**, so a 404-vs-403
+   difference confirms whether a given `ReconciliationIssue` exists in the tenant. Every
+   sibling endpoint checks the role first. Low severity (UUID-guess limited), outside the
+   Phase 2 surface.
+7. **`effective_site_scope` decides tenant-wide by subtraction** (`active_roles - {SUPERVISOR}`),
+   so an unrecognised role token would return `None` and widen to tenant-wide. It fails open.
+   The one-line fix is an allowlist intersection, but it changes authorization semantics, and
+   the plan forbids broadening Phase 2 into a permission-system rewrite.
+8. **`SITE_SCOPED_ACTIONS` is enforced nowhere.** No call site passes `site_id` to
+   `policy.check/allows/require`, so the site-grant branch of the matrix is unreachable. A
+   supervisor granted the right site is still denied `RESOLVE_OPERATIONAL_RECONCILIATION` —
+   it fails closed, so it is a broken feature rather than a leak.
+9. **The baseline branch has no force-push or deletion protection.** GitHub requires a Pro
    plan for rulesets on a private repository, and making the repository public to obtain
    protection would be a worse trade. Until the plan changes, the branch's integrity rests
    on discipline: never force push, never rewrite history (plan section 4.2).
