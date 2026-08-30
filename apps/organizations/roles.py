@@ -114,13 +114,37 @@ ACTION_ROLES: dict[str, frozenset[str]] = {
     ),
 }
 
+#: Roles that see the whole tenant. This is an ALLOWLIST on purpose: `effective_site_scope`
+#: grants tenant-wide visibility only to a role named here, so a membership holding an
+#: unrecognised role token -- or supervisor plus an unrecognised token -- narrows to its
+#: explicit site grants instead of silently widening. Deciding tenant-wide by subtracting
+#: supervisor would fail OPEN on any role this table does not know about.
+TENANT_WIDE_ROLES: frozenset[str] = frozenset(
+    {
+        Role.OWNER,
+        Role.OPERATIONS_MANAGER,
+        Role.FINANCE_REVIEWER,
+        Role.AUDITOR,
+    }
+)
+
 #: Actions whose permission additionally narrows to the sites a supervisor was granted.
 #: A supervisor with no active MembershipSiteGrant reaches no site at all (line 378):
 #: an empty grant set means no access, never tenant-wide access.
+#:
+#: `RESOLVE_OPERATIONAL_RECONCILIATION` was removed here. It never belonged: ACTION_ROLES
+#: grants it to owner and operations manager only, so a supervisor was already denied at
+#: the role step and the site branch was unreachable. Section 9.3 gives a supervisor
+#: assigned-site **view-only** access to operational reconciliation, which is enforced by
+#: scoping the read in `apps.ingestion.selectors`, not by widening a mutation.
+#:
+#: `ACT_ON_CASE` remains as the documented contract for the operational journeys (A and C),
+#: which are unbuilt. It is likewise not yet exercised: no call site passes `site_id`, and
+#: `transitions._roles_for` never returns SUPERVISOR for a revenue case. It stays declared
+#: so the contract is written down, not because it is enforced today.
 SITE_SCOPED_ACTIONS: frozenset[str] = frozenset(
     {
         Action.ACT_ON_CASE,
-        Action.RESOLVE_OPERATIONAL_RECONCILIATION,
     }
 )
 

@@ -19,7 +19,12 @@ from dataclasses import dataclass
 from django.core.exceptions import PermissionDenied
 
 from apps.organizations.models import Membership
-from apps.organizations.roles import ACTION_ROLES, SITE_SCOPED_ACTIONS, Role
+from apps.organizations.roles import (
+    ACTION_ROLES,
+    SITE_SCOPED_ACTIONS,
+    TENANT_WIDE_ROLES,
+    Role,
+)
 
 
 class Denied(PermissionDenied):
@@ -155,8 +160,15 @@ def effective_site_scope(membership: Membership) -> set[uuid.UUID] | None:
 
     Returning None for a supervisor with no grants would silently widen access to the
     whole tenant, which is precisely the failure this function exists to prevent.
+
+    Tenant-wide visibility is decided by an ALLOWLIST intersection, never by subtracting
+    supervisor from the held roles. Subtraction fails OPEN: any role token this codebase
+    does not recognise -- a value written directly to the database, a role added to the
+    enum but not to the table, a typo in a fixture -- would survive the subtraction and
+    widen the reader to the whole tenant. An intersection fails CLOSED: an unknown token
+    grants nothing, so the membership narrows to its explicit site grants, which for a
+    membership with none is the empty set, which means no sites.
     """
-    tenant_wide = membership.active_roles - {Role.SUPERVISOR}
-    if tenant_wide:
+    if membership.active_roles & TENANT_WIDE_ROLES:
         return None
     return granted_site_ids(membership)

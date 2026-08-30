@@ -50,11 +50,7 @@ TENANT_HEALTH_SELECTORS: dict[str, str] = {
     "apps.organizations.selectors.active_memberships_for": "Returns the requesting user's own memberships.",
     "apps.organizations.selectors.membership_for": "Resolves the requesting user's own membership in one organization. It returns tenant identity, not site business data, and it is what establishes the caller's scope -- scoping it by site would be circular.",
     # --- known gaps, recorded rather than hidden ---------------------------------------
-    "apps.ingestion.selectors.open_reconciliation_issues": "OPEN PRODUCT DECISION. Unlike an identity issue, a ReconciliationIssue names a "
-    "typed canonical subject that CAN be a site or a work order, so it is genuinely "
-    "site-addressable. It is currently rendered organization-wide to any reader with "
-    "VIEW_ORGANIZATION. Left unscoped pending an explicit owner decision, because "
-    "scoping it is a product question about who owns reconciliation, not a bug fix.",
+    "apps.ingestion.selectors.open_reconciliation_issues_for": "Derives its scope FROM the membership rather than accepting one. That is the point: it is the single door every reconciliation surface uses, so the badge count and the queue list cannot drift apart. Accepting a site-scope argument would let a caller widen it, which is exactly what this function exists to prevent. The underlying open_reconciliation_issues does take limit_to_site_ids and is checked by the empty-set rule below.",
     "apps.recovery.selectors.exports_for_organization": "Finance exports are organization-level artifacts, and every surface that renders "
     "them is gated on EXPORT_FINANCE_CSV (owner/finance), both of which are tenant-wide "
     "roles. Unreachable by a site-scoped reader.",
@@ -166,3 +162,108 @@ class TestEmptyScopeReturnsNothing:
             "No scoped selector returned data for a tenant-wide scope, so the empty-set "
             "assertion above proves nothing."
         )
+
+
+class TestEffectiveSiteScopeFailsClosed:
+    """Tenant-wide visibility is an allowlist, never a subtraction.
+
+    The retired implementation computed `active_roles - {SUPERVISOR}` and returned `None`
+    (tenant-wide) if anything survived. Any role token the codebase did not recognise
+    survived that subtraction -- a value written straight to the database, a role added to
+    the enum but not to the table, a typo in a fixture -- and silently widened the reader
+    to the whole tenant. An intersection with a named allowlist fails closed instead.
+    """
+
+    @pytest.fixture
+    def atlas(self, settings):  # type: ignore[no-untyped-def]
+        settings.APP_ENV = "local"
+        return loaded_atlas()
+
+    @staticmethod
+    def _add_role(membership, role: str) -> None:  # type: ignore[no-untyped-def]
+        from apps.organizations.models import MembershipRoleGrant
+
+        MembershipRoleGrant.objects.create(membership=membership, role=role, revoked_at=None)
+
+    @pytest.mark.parametrize("who", ["owner", "ops", "finance", "auditor"])
+    def test_the_four_allowlisted_roles_are_tenant_wide(self, atlas, who) -> None:  # type: ignore[no-untyped-def]
+        from apps.organizations.policy import effective_site_scope
+
+        assert effective_site_scope(getattr(atlas, who)) is None
+
+    def test_supervisor_only_is_never_tenant_wide(self, atlas) -> None:  # type: ignore[no-untyped-def]
+        from apps.organizations.policy import effective_site_scope
+
+        assert effective_site_scope(atlas.supervisor) == set()
+
+    def test_an_unknown_role_alone_is_never_tenant_wide(self, atlas) -> None:  # type: ignore[no-untyped-def]
+        """The case the subtraction got wrong."""
+        from apps.organizations.models import MembershipRoleGrant
+        from apps.organizations.policy import effective_site_scope
+
+        MembershipRoleGrant.objects.filter(membership=atlas.supervisor).delete()
+        self._add_role(atlas.supervisor, "regional_director")
+        atlas.supervisor.refresh_from_db()
+        assert "regional_director" in atlas.supervisor.active_roles, "precondition"
+
+        scope = effective_site_scope(atlas.supervisor)
+        assert scope is not None, "an unrecognised role widened the reader to the whole tenant"
+        assert scope == set()
+
+    def test_supervisor_plus_an_unknown_role_is_never_tenant_wide(self, atlas) -> None:  # type: ignore[no-untyped-def]
+        from apps.organizations.policy import effective_site_scope
+
+        self._add_role(atlas.supervisor, "regional_director")
+        atlas.supervisor.refresh_from_db()
+        scope = effective_site_scope(atlas.supervisor)
+        assert scope is not None, "supervisor + an unknown token widened to the whole tenant"
+        assert scope == set()
+
+    def test_an_unknown_role_still_honours_explicit_grants(self, atlas) -> None:  # type: ignore[no-untyped-def]
+        """Failing closed must narrow to the grants, not erase them."""
+        from apps.operations.models import Site
+        from apps.organizations.models import MembershipSiteGrant
+        from apps.organizations.policy import effective_site_scope
+
+        site = Site.objects.filter(organization=atlas.organization).first()
+        MembershipSiteGrant.objects.create(membership=atlas.supervisor, site=site)
+        self._add_role(atlas.supervisor, "regional_director")
+        atlas.supervisor.refresh_from_db()
+        assert effective_site_scope(atlas.supervisor) == {site.id}
+
+    def test_an_unknown_role_grants_no_action(self, atlas) -> None:  # type: ignore[no-untyped-def]
+        """Deny-by-default at the action layer too, not only at the scope layer."""
+        from apps.organizations.models import MembershipRoleGrant
+        from apps.organizations.policy import allows
+        from apps.organizations.roles import Action
+
+        MembershipRoleGrant.objects.filter(membership=atlas.supervisor).delete()
+        self._add_role(atlas.supervisor, "regional_director")
+        atlas.supervisor.refresh_from_db()
+        for action in (Action.VIEW_ORGANIZATION, Action.ACT_ON_CASE, Action.EXPORT_FINANCE_CSV):
+            assert not allows(atlas.supervisor, action), action
+
+
+class TestSiteScopedActionsIsHonest:
+    """Requirement 6: the matrix must not claim an enforcement that does not exist."""
+
+    def test_resolve_operational_reconciliation_is_no_longer_declared_site_scoped(self) -> None:
+        from apps.organizations.roles import ACTION_ROLES, SITE_SCOPED_ACTIONS, Action, Role
+
+        assert Action.RESOLVE_OPERATIONAL_RECONCILIATION not in SITE_SCOPED_ACTIONS
+        assert Role.SUPERVISOR not in ACTION_ROLES[Action.RESOLVE_OPERATIONAL_RECONCILIATION], (
+            "supervisors must not gain mutation authority over reconciliation"
+        )
+
+    def test_act_on_case_remains_declared_as_the_future_contract(self) -> None:
+        from apps.organizations.roles import SITE_SCOPED_ACTIONS, Action
+
+        assert Action.ACT_ON_CASE in SITE_SCOPED_ACTIONS
+
+    def test_tenant_wide_roles_is_an_explicit_allowlist(self) -> None:
+        from apps.organizations.roles import TENANT_WIDE_ROLES, Role
+
+        assert TENANT_WIDE_ROLES == frozenset(
+            {Role.OWNER, Role.OPERATIONS_MANAGER, Role.FINANCE_REVIEWER, Role.AUDITOR}
+        )
+        assert Role.SUPERVISOR not in TENANT_WIDE_ROLES

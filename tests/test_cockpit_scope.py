@@ -27,7 +27,16 @@ from tests.phase6_helpers import loaded_atlas
 
 pytestmark = pytest.mark.django_db
 
-MONEY = "480"
+#: The exact rendered token for the demo's candidate value. Never assert the bare digits
+#: "480": the source-freshness panel prints an elapsed age in minutes, which grows past
+#: 14808 and contains "480" as a substring, so a bare check both passes and fails for the
+#: wrong reasons. Every money assertion below reads a NAMED stage out of the financial
+#: section instead.
+CANDIDATE = "$480.00"
+
+MONEY_SECTION = re.compile(r'<section aria-labelledby="money-heading">(.*?)</section>', re.S)
+STAGE_TILE = re.compile(r"<dt>([^<]+)</dt>\s*<dd>(.*?)</dd>", re.S)
+SEVERITY_TILE = re.compile(r'<div class="tile tile--\w+"><dt>(\w+)</dt><dd>(\d+)</dd></div>')
 
 
 @pytest.fixture
@@ -43,14 +52,30 @@ def cockpit(client, email):  # type: ignore[no-untyped-def]
     return response.content.decode()
 
 
+def money_section(html: str) -> str:
+    """Just the financial-stage section, so no other number can be mistaken for money."""
+    match = MONEY_SECTION.search(html)
+    assert match, "the financial-stage section did not render at all"
+    return match.group(1)
+
+
+def stage_values(html: str) -> dict[str, str]:
+    """{'Candidate value': '$480.00', 'Invoiced': 'not available in this phase', ...}."""
+    return {
+        label.strip(): re.sub(r"<[^>]+>", "", value).strip()
+        for label, value in STAGE_TILE.findall(money_section(html))
+    }
+
+
+def stage(html: str, label: str) -> str:
+    values = stage_values(html)
+    assert label in values, f"no financial stage named {label!r}; saw {sorted(values)}"
+    return values[label]
+
+
 def severity_tiles(html: str) -> dict[str, str]:
     """Parse the rendered severity tiles: {'low': '0', 'medium': '1', ...}."""
-    return {
-        m.group(1).lower(): m.group(2)
-        for m in re.finditer(
-            r'<div class="tile tile--\w+"><dt>(\w+)</dt><dd>(\d+)</dd></div>', html
-        )
-    }
+    return {m.group(1).lower(): m.group(2) for m in SEVERITY_TILE.finditer(html)}
 
 
 def headline(html: str) -> str:
@@ -67,7 +92,7 @@ class TestTenantWideRolesSeeEverything:
         html = cockpit(client, email)
         assert headline(html) == "1"
         assert severity_tiles(html)["medium"] == "1"
-        assert MONEY in html
+        assert stage(html, "Candidate value") == CANDIDATE
 
     def test_a_tenant_wide_role_stays_tenant_wide_even_with_a_site_grant(
         self, atlas, client
@@ -82,7 +107,7 @@ class TestTenantWideRolesSeeEverything:
         assert effective_site_scope(atlas.finance) is None
         html = cockpit(client, "finance@atlas.example")
         assert headline(html) == "1"
-        assert MONEY in html
+        assert stage(html, "Candidate value") == CANDIDATE
 
 
 class TestZeroGrantSupervisorSeesNothing:
@@ -97,13 +122,15 @@ class TestZeroGrantSupervisorSeesNothing:
         tiles = severity_tiles(html)
         assert tiles, "precondition: the severity tiles rendered at all"
         assert set(tiles.values()) == {"0"}, f"a severity tile leaked a count: {tiles}"
-        assert MONEY not in html, "the cockpit leaked an organization-wide money total"
+        assert stage(html, "Candidate value") == "none", (
+            "the cockpit leaked an organization-wide money total"
+        )
         assert atlas.case.case_number not in html
 
     def test_no_stage_shows_a_value_from_an_ungranted_site(self, atlas, client) -> None:  # type: ignore[no-untyped-def]
         html = cockpit(client, "supervisor@atlas.example")
-        money = re.findall(r"\$\s*([\d,]+\.\d{2})", html)
-        assert money == [], f"money rendered to a zero-grant reader: {money}"
+        rendered = [v for v in stage_values(html).values() if v.startswith("$")]
+        assert rendered == [], f"money rendered to a zero-grant reader: {rendered}"
 
     def test_the_page_still_renders_for_them(self, atlas, client) -> None:  # type: ignore[no-untyped-def]
         """Non-vacuity: the assertions above must not be passing on an error page."""
@@ -122,7 +149,7 @@ class TestGrantedSupervisorSeesOnlyTheirSite:
         html = cockpit(client, "supervisor@atlas.example")
         assert headline(html) == "1"
         assert severity_tiles(html)["medium"] == "1"
-        assert MONEY in html
+        assert stage(html, "Candidate value") == CANDIDATE
 
     def test_granting_a_different_site_reveals_nothing(self, atlas, client) -> None:  # type: ignore[no-untyped-def]
         other = (
@@ -134,7 +161,7 @@ class TestGrantedSupervisorSeesOnlyTheirSite:
         html = cockpit(client, "supervisor@atlas.example")
         assert headline(html) == "0"
         assert set(severity_tiles(html).values()) == {"0"}
-        assert MONEY not in html
+        assert stage(html, "Candidate value") == "none"
 
 
 class TestEmptySetIsNeverNone:
@@ -163,7 +190,7 @@ class TestCrossTenant:
         html = cockpit(client, "owner@beacon.example")
         assert headline(html) == "0"
         assert set(severity_tiles(html).values()) == {"0"}
-        assert MONEY not in html
+        assert stage(html, "Candidate value") == "none"
         assert "Meridian" not in html and "Atlas" not in html
 
 
@@ -176,7 +203,8 @@ class TestCockpitAndLedgerAgree:
         client.force_login(User.objects.get(email="finance@atlas.example"))
         cockpit_html = client.get(reverse("app:home")).content.decode()
         ledger_html = client.get(reverse("recovery:ledger")).content.decode()
-        assert MONEY in cockpit_html and MONEY in ledger_html
+        assert stage(cockpit_html, "Candidate value") == CANDIDATE
+        assert CANDIDATE in ledger_html
         assert "480.0000" not in cockpit_html, "money must be quantized to cents for display"
 
     def test_the_cockpit_now_counts_items_whose_case_is_not_open(self, atlas, client) -> None:  # type: ignore[no-untyped-def]
@@ -211,7 +239,9 @@ class TestCockpitAndLedgerAgree:
         # The retired selector now reports nothing; the shipped one still reports the value.
         assert financial.stage_totals(atlas.organization.id)["candidate"] is None
         html = cockpit(client, "finance@atlas.example")
-        assert MONEY in html, "a dismissed case's candidate value vanished from the cockpit"
+        assert stage(html, "Candidate value") == CANDIDATE, (
+            "a dismissed case's candidate value vanished from the cockpit"
+        )
         assert headline(html) == "0", "but it is no longer an OPEN case"
 
 
@@ -222,7 +252,7 @@ class TestRegressionGuard:
         html = cockpit(client, "supervisor@atlas.example")
         numbers = [n for n in re.findall(r"<dd>(\d+)</dd>", html) if n != "0"]
         assert numbers == [], f"a non-zero tile rendered to a zero-grant reader: {numbers}"
-        assert re.findall(r"\$\s*[\d,]+\.\d{2}", html) == []
+        assert [v for v in stage_values(html).values() if v.startswith("$")] == []
         assert headline(html) == "0"
 
 
@@ -242,10 +272,49 @@ class TestWithheldTotalsAreExplained:
         _second_item_in(atlas, currency="EUR")
         html = cockpit(client, "finance@atlas.example")
         assert "More than one currency is in view" in html
-        assert MONEY not in html, "a total was still rendered across two currencies"
+        assert stage(html, "Candidate value") == "none", (
+            "a total was still rendered across two currencies"
+        )
 
     def test_a_single_currency_tenant_sees_no_such_warning(self, atlas, client) -> None:  # type: ignore[no-untyped-def]
         """Non-vacuity control: the banner must not be permanently on."""
         html = cockpit(client, "finance@atlas.example")
         assert "More than one currency is in view" not in html
-        assert MONEY in html
+        assert stage(html, "Candidate value") == CANDIDATE
+
+
+class TestTheMoneyAssertionsCannotBeFooled:
+    """Requirement 7: why these tests no longer search the page for the digits "480".
+
+    The cockpit's source-freshness panel prints an elapsed age in minutes. That number
+    grows, and it has already passed 14808 -- which contains "480". A bare substring check
+    therefore breaks in both directions: `"480" in html` passes when no money rendered,
+    and `"480" not in html` fails when no money leaked. Neither failure looks like a test
+    bug; both look like the product being wrong.
+    """
+
+    DECOY = (
+        '<section aria-labelledby="fresh-heading"><ul><li>ar_ledger - 14808 min old</li></ul>'
+        "</section>"
+        '<section aria-labelledby="money-heading"><dl>'
+        "<div><dt>Candidate value</dt><dd><span>none</span></dd></div>"
+        "<div><dt>Invoiced</dt><dd><span>not available in this phase</span></dd></div>"
+        "</dl></section>"
+    )
+
+    def test_the_bare_substring_check_would_be_fooled(self) -> None:
+        assert "480" in self.DECOY, "precondition: the decoy contains the digits"
+
+    def test_the_stage_parser_is_not(self) -> None:
+        assert stage(self.DECOY, "Candidate value") == "none"
+        assert [v for v in stage_values(self.DECOY).values() if v.startswith("$")] == []
+
+    def test_the_parser_reads_a_real_value_when_there_is_one(self) -> None:
+        """Non-vacuity: it must not simply return "none" for everything."""
+        html = self.DECOY.replace("<span>none</span>", "$480.00")
+        assert stage(html, "Candidate value") == CANDIDATE
+
+    def test_the_parser_ignores_numbers_outside_the_money_section(self, atlas, client) -> None:  # type: ignore[no-untyped-def]
+        html = cockpit(client, "supervisor@atlas.example")
+        assert "min old" in html, "precondition: the freshness panel rendered"
+        assert stage(html, "Candidate value") == "none"

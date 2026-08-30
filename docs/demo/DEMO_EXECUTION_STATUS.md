@@ -15,7 +15,8 @@ subsequent wording may be recorded as `owner_approved`** (plan §4.4). Allowed v
 | 1B — Initial local commit | complete_pending_owner_review | "Go ahead, I Approve Phase 1B - Initiial local commit" | 230 staged and committed | 859 pass / 0 fail, 88%, run **from the staged state** | Baseline created. Local only; no remote exists. | `416a727` |
 | 1B.1 — Ignore the excluded specification | complete_pending_owner_review | "Add .gitignore" | 1 (`.gitignore`) | n/a — ignore rule only | The governing specification can no longer be swept in by a blind `git add .`. It remains on disk and untracked. | `9dbfc2b` |
 | 1C — Private remote | complete_pending_owner_review | "I also approve phase 1c - private remote" | none — remote configuration only | verified remote tree = 231 files, identical to local | Private repo `nama132/handoffsignal` created and verified private BEFORE the push. Branch `v2-commercial-cleaning` pushed with upstream tracking; remote SHA matches local. No tags, no other branch, no webhook, no deploy key, no environment, no autodeploy. Branch protection **unavailable** — GitHub Pro is required for rulesets on a private repository, and the repository was deliberately NOT made public to obtain it. | `37947a1` |
-| 2 — Cockpit site scope | complete_pending_owner_review | "I Approve Phase 2 - Cockpit Site Scope" | 4 changed, 2 test modules added | 863 non-browser + 20 browser pass, 88% | F-N1 closed. Every number on `/app/` is now scoped by the same `effective_site_scope`. Proven non-vacuous: reverting the fix fails 5 tests. A four-lens audit of the whole defect class found **no other live leak**. A structural guard now classifies every selector. | pending |
+| 2 — Cockpit site scope | complete_pending_owner_review | "I Approve Phase 2 - Cockpit Site Scope" | 4 changed, 2 test modules added | 863 non-browser + 20 browser pass, 88% | F-N1 closed. Every number on `/app/` is now scoped by the same `effective_site_scope`. Proven non-vacuous: reverting the fix fails 5 tests. A four-lens audit of the whole defect class found no other live leak. A structural guard now classifies every selector. | `e16253f` |
+| 2.1 — Authorization hardening | complete_pending_owner_review | "Open a narrowly scoped Phase 2.1 authorization-hardening correction" | 5 production files, 3 test modules | 898 non-browser + 20 browser pass | Reconciliation read scoped for supervisors; resolution authority reordered so it cannot confirm an id exists; `effective_site_scope` fails closed; the inert site-scoped entry retired; the brittle Phase 2 money assertions repaired. **Not pushed** pending owner review. | pending |
 | 3 — Four-stage cockpit | not_started | — | — | — | F-N2 reproduced during 1A. | — |
 | 4 — Relative demo clock | not_started | — | — | — | F-N6 outstanding. | — |
 | 5 — Secure demo accounts | not_started | — | — | — | F-N3 outstanding. **Hard gate before any hosting.** | — |
@@ -51,6 +52,26 @@ an artifact that requires an interview to show. This clarification:
 The historical Phase 0A record stands unaltered and must not be rewritten as though this
 clarification had always applied.
 
+## Findings closed by Phase 2.1
+
+| Finding | How it was closed |
+| --- | --- |
+| `open_reconciliation_issues` unscoped and site-addressable | The selector takes `limit_to_site_ids` and `include_financial`. A supervisor reads only non-financial issues whose subject is a granted **site** or a **work order** on one — the only two of seven subject types that resolve unambiguously to a single site. Customer-wide, contract-wide, obligation-wide and financial subjects stay hidden rather than being attributed by guess. |
+| The badge count and the queue could disagree | Both surfaces now call one function, `open_reconciliation_issues_for(membership)`. A count the reader cannot open is itself a disclosure. |
+| `reconciliation_resolve` was an existence oracle | Authority is decided **before** any lookup, the lookup is confined to the domains the member may resolve, and the final action check still runs before mutation. An unauthorized-domain id, another tenant's id, and an invented id now return byte-identical 404s. |
+| `effective_site_scope` failed open | Tenant-wide is now an allowlist intersection over `TENANT_WIDE_ROLES`. Supervisor-only, supervisor-plus-unknown, and unknown-only memberships all narrow to explicit grants. |
+| `SITE_SCOPED_ACTIONS` claimed an enforcement that did not exist | `RESOLVE_OPERATIONAL_RECONCILIATION` removed — `ACTION_ROLES` never granted it to a supervisor, so the site branch was unreachable and the entry was a lie in the matrix. No new mutation authority was granted to supervisors. `ACT_ON_CASE` stays, documented as the contract for the unbuilt operational journeys. |
+| The Phase 2 money assertions were brittle | They searched the whole page for the digits `480`, which the freshness panel's elapsed age (now past 14808) contains. Every money assertion now parses a **named stage** out of the financial section and compares the exact token `$480.00`. A decoy test proves the old check would have been fooled and the new one is not. |
+
+## Explicitly deferred, not closed
+
+| Finding | Why it is deferred |
+| --- | --- |
+| `ACT_ON_CASE` site scoping is declared but unenforced | No call site passes `site_id`, and `transitions._roles_for` never returns SUPERVISOR for a revenue case. It is the contract for Journeys A and C, which are unbuilt. Enforcing it now would be writing authorization for a journey that does not exist. |
+| Tenant-health visibility for a site-scoped reader | Source freshness, import batch history, identity-issue counts and detector-run status remain organization-wide for every role. Whether a supervisor should see tenant pipeline metadata at all is a product question, deliberately left open. |
+| The member roster on case detail | `apps/exceptions/views.py` supplies the full organization membership list to the assign-owner control. It is people, not site business data. Untouched. |
+| F-P6-12, F-P6-13, F-P6-14, F-N2, F-N4, F-N5, F-N6, F-N7, F-N9, F-N16 | Carried from earlier reviews; each belongs to a later numbered phase. |
+
 ## Known deviations carried past the baseline
 
 1. **`.env.example` is not "names and safe comments only"** (plan §6.4 acceptance 4).
@@ -68,25 +89,7 @@ clarification had always applied.
 4. **Three committed documents state as present-tense fact that the repository has no
    commits.** This commit falsifies them. To be corrected when those documents are next
    touched.
-5. **`open_reconciliation_issues` is unscoped and IS site-addressable.** Unlike an identity
-   issue, a `ReconciliationIssue` names a typed canonical subject that can be a site or a
-   work order, yet the reconciliation queue renders every open issue in the organization to
-   any reader holding `VIEW_ORGANIZATION`. Left unchanged: the plan's section 7.4 task 10
-   requires an explicit product decision rather than a silent redesign. Recorded in
-   `tests/test_site_scope_contract.py` so it cannot be forgotten.
-6. **`reconciliation_resolve` looks the object up before checking the role**, so a 404-vs-403
-   difference confirms whether a given `ReconciliationIssue` exists in the tenant. Every
-   sibling endpoint checks the role first. Low severity (UUID-guess limited), outside the
-   Phase 2 surface.
-7. **`effective_site_scope` decides tenant-wide by subtraction** (`active_roles - {SUPERVISOR}`),
-   so an unrecognised role token would return `None` and widen to tenant-wide. It fails open.
-   The one-line fix is an allowlist intersection, but it changes authorization semantics, and
-   the plan forbids broadening Phase 2 into a permission-system rewrite.
-8. **`SITE_SCOPED_ACTIONS` is enforced nowhere.** No call site passes `site_id` to
-   `policy.check/allows/require`, so the site-grant branch of the matrix is unreachable. A
-   supervisor granted the right site is still denied `RESOLVE_OPERATIONAL_RECONCILIATION` —
-   it fails closed, so it is a broken feature rather than a leak.
-9. **The baseline branch has no force-push or deletion protection.** GitHub requires a Pro
+5. **The baseline branch has no force-push or deletion protection.** GitHub requires a Pro
    plan for rulesets on a private repository, and making the repository public to obtain
    protection would be a worse trade. Until the plan changes, the branch's integrity rests
    on discipline: never force push, never rewrite history (plan section 4.2).

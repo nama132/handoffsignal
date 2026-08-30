@@ -18,13 +18,19 @@ from django.views.decorators.http import require_GET, require_POST
 
 from apps.ingestion import selectors
 from apps.ingestion.forms import ImportUploadForm
-from apps.ingestion.models import IdentityResolutionIssue, ImportBatch, ReconciliationIssue
+from apps.ingestion.models import (
+    FINANCIAL_FIELD_GROUPS,
+    OPERATIONAL_FIELD_GROUPS,
+    IdentityResolutionIssue,
+    ImportBatch,
+    ReconciliationIssue,
+)
 from apps.ingestion.services import coverage as coverage_service
 from apps.ingestion.services import identity as identity_service
 from apps.ingestion.services import imports as import_service
 from apps.ingestion.services import reconciliation as reconciliation_service
 from apps.organizations.models import Membership
-from apps.organizations.policy import require
+from apps.organizations.policy import Denied, require
 from apps.organizations.roles import Action
 
 #: Which action each file type's commit requires (section 9.3, rows 3-5).
@@ -69,8 +75,10 @@ def import_list(request: HttpRequest) -> HttpResponse:
             "batches": selectors.batches_for_organization(organization_id)[:50],
             "freshness": selectors.source_freshness(organization_id),
             "open_identity_issues": selectors.open_identity_issues(organization_id).count(),
-            "open_reconciliation_issues": selectors.open_reconciliation_issues(
-                organization_id
+            # The badge and the queue must show the same set. A count the reader cannot
+            # then open is how they learn something exists that is not theirs to see.
+            "open_reconciliation_issues": selectors.open_reconciliation_issues_for(
+                membership
             ).count(),
         },
     )
@@ -253,7 +261,7 @@ def reconciliation_queue(request: HttpRequest) -> HttpResponse:
         request,
         "ingestion/reconciliation_queue.html",
         {
-            "issues": selectors.open_reconciliation_issues(membership.organization_id),
+            "issues": selectors.open_reconciliation_issues_for(membership),
             "runs": reconciliation_service.runs_for_organization(membership.organization_id)[:10],
             "can_resolve_operational": _can(membership, Action.RESOLVE_OPERATIONAL_RECONCILIATION),
             "can_resolve_financial": _can(membership, Action.RESOLVE_FINANCIAL_RECONCILIATION),
@@ -261,26 +269,63 @@ def reconciliation_queue(request: HttpRequest) -> HttpResponse:
     )
 
 
-#: Field groups whose resolution crosses into finance and needs the finance role.
-FINANCIAL_FIELD_GROUPS = {"contract_rate", "invoice_status"}
+def _action_for(field_group: str) -> str:
+    """Which action resolving this conflict requires."""
+    if field_group in FINANCIAL_FIELD_GROUPS:
+        return Action.RESOLVE_FINANCIAL_RECONCILIATION
+    return Action.RESOLVE_OPERATIONAL_RECONCILIATION
+
+
+def _resolvable_field_groups(membership: Membership) -> frozenset[str]:
+    """The reconciliation domains this member may resolve, as field-group values.
+
+    Empty means no resolution authority of any kind, which is decided before any object
+    is looked up.
+    """
+    groups: set[str] = set()
+    if _can(membership, Action.RESOLVE_OPERATIONAL_RECONCILIATION):
+        groups |= OPERATIONAL_FIELD_GROUPS
+    if _can(membership, Action.RESOLVE_FINANCIAL_RECONCILIATION):
+        groups |= FINANCIAL_FIELD_GROUPS
+    return frozenset(groups)
 
 
 @login_required
 @require_POST
 def reconciliation_resolve(request: HttpRequest, issue_id: uuid.UUID) -> HttpResponse:
+    """Resolve one reconciliation issue.
+
+    The ordering here is the security property, not an implementation detail.
+
+    1. **Authority is decided before any lookup.** A member with no resolution authority
+       is refused without the database being asked whether the id exists, so a 403 can
+       never double as confirmation that an issue is there.
+    2. **The lookup is confined to the domains this member may resolve.** An operations
+       manager asking for an invoice-status issue gets exactly what they get for a UUID
+       that was never issued: 404. The two are indistinguishable, so the pair cannot be
+       used to enumerate finance conflicts.
+    3. **The action check still runs before the mutation.** Steps 1 and 2 narrow what can
+       be reached; only this decides what may be done, and it is the one the service
+       relies on.
+    """
     membership = _require_membership(request)
+
+    authorized_groups = _resolvable_field_groups(membership)
+    if not authorized_groups:
+        # Before the lookup, deliberately. Nothing here reveals whether issue_id exists.
+        raise Denied("This role may not resolve reconciliation issues.")
+
     issue = ReconciliationIssue.objects.filter(
-        organization_id=membership.organization_id, id=issue_id
+        organization_id=membership.organization_id,
+        id=issue_id,
+        field_group__in=authorized_groups,
     ).first()
     if issue is None:
+        # Unknown id, another tenant's id, or an id in a domain this member may not
+        # resolve. All three answer identically (section 17, rule 8).
         raise Http404
 
-    action = (
-        Action.RESOLVE_FINANCIAL_RECONCILIATION
-        if issue.field_group in FINANCIAL_FIELD_GROUPS
-        else Action.RESOLVE_OPERATIONAL_RECONCILIATION
-    )
-    require(membership, action)
+    require(membership, _action_for(issue.field_group))
 
     reconciliation_service.resolve_issue(
         issue=issue,

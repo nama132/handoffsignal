@@ -475,6 +475,15 @@ class SourcePrecedenceEntry(TenantScopedModel):
         assert_same_organization(self, "rule", "source")
 
 
+#: Field groups whose resolution crosses into finance and needs the finance role.
+#: A supervisor never sees these, in any view, at any site scope.
+FINANCIAL_FIELD_GROUPS: frozenset[str] = frozenset({"contract_rate", "invoice_status"})
+
+#: Everything else. Named explicitly rather than derived, so adding a FieldGroup value
+#: forces a deliberate decision about which side of the finance boundary it falls on.
+OPERATIONAL_FIELD_GROUPS: frozenset[str] = frozenset({"identity", "schedule_status", "completion"})
+
+
 class ReconciliationIssue(TenantScopedModel):
     """Two sources disagree about the same canonical fact.
 
