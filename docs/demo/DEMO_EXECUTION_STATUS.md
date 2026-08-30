@@ -14,7 +14,7 @@ subsequent wording may be recorded as `owner_approved`** (plan §4.4). Allowed v
 | 1A — Read-only preflight | complete_pending_owner_review | (§17 authorises 1A directly) | none — read-only | 859 pass / 0 fail, 88% | Manifest, exclusions and boundary verified. No stage, commit, remote or push. | — |
 | 1B — Initial local commit | complete_pending_owner_review | "Go ahead, I Approve Phase 1B - Initiial local commit" | 230 staged and committed | 859 pass / 0 fail, 88%, run **from the staged state** | Baseline created. Local only; no remote exists. | `416a727` |
 | 1B.1 — Ignore the excluded specification | complete_pending_owner_review | "Add .gitignore" | 1 (`.gitignore`) | n/a — ignore rule only | The governing specification can no longer be swept in by a blind `git add .`. It remains on disk and untracked. | `9dbfc2b` |
-| 1C — Private remote | blocked | "I also approve phase 1c - private remote" | — | — | **Approved and authorised to push, but blocked on authentication.** `gh` 2.98.0 was installed; no GitHub credential exists on this machine that Claude may use, and Claude must never enter one. Awaiting the owner running `gh auth login`. | — |
+| 1C — Private remote | complete_pending_owner_review | "I also approve phase 1c - private remote" | none — remote configuration only | verified remote tree = 231 files, identical to local | Private repo `nama132/handoffsignal` created and verified private BEFORE the push. Branch `v2-commercial-cleaning` pushed with upstream tracking; remote SHA matches local. No tags, no other branch, no webhook, no deploy key, no environment, no autodeploy. Branch protection **unavailable** — GitHub Pro is required for rulesets on a private repository, and the repository was deliberately NOT made public to obtain it. | `37947a1` |
 | 2 — Cockpit site scope | not_started | — | — | — | F-N1 reproduced during 1A and re-confirmed by the pre-commit audit. | — |
 | 3 — Four-stage cockpit | not_started | — | — | — | F-N2 reproduced during 1A. | — |
 | 4 — Relative demo clock | not_started | — | — | — | F-N6 outstanding. | — |
@@ -35,7 +35,8 @@ subsequent wording may be recorded as `owner_approved`** (plan §4.4). Allowed v
 | 2026-08-29 | `CLAUDE_V2_COMMERCIAL_CLEANING_MASTER_PROMPT.md` is **excluded** from the commit | The file remains untracked in the working tree. Consequence recorded below. |
 | 2026-08-29 | The `.env.example` credential deviation is deferred to Phase 5 | See "Known deviations". |
 | 2026-08-30 | Add a `.gitignore` rule for the excluded specification | Durable enforcement of the 2026-08-29 exclusion decision. Committed as `9dbfc2b`. |
-| 2026-08-30 | **Create the private remote and push the branch** | Supersedes the earlier "keep it local" instruction. Phase 1C is authorised. Repository name `handoffsignal`, visibility private, branch `v2-commercial-cleaning`. |
+| 2026-08-30 | **Create the private remote and push the branch** | Supersedes the earlier "keep it local" instruction. Phase 1C executed: `https://github.com/nama132/handoffsignal` (private). |
+| 2026-08-30 | Approve Phase 2 — Cockpit Site Scope | Authorised immediately after Phase 1C. |
 
 ## Owner-directed scope clarification (plan §1)
 
@@ -67,6 +68,10 @@ clarification had always applied.
 4. **Three committed documents state as present-tense fact that the repository has no
    commits.** This commit falsifies them. To be corrected when those documents are next
    touched.
+5. **The baseline branch has no force-push or deletion protection.** GitHub requires a Pro
+   plan for rulesets on a private repository, and making the repository public to obtain
+   protection would be a worse trade. Until the plan changes, the branch's integrity rests
+   on discipline: never force push, never rewrite history (plan section 4.2).
 
 ## Verification evidence for the baseline
 
