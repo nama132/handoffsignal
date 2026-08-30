@@ -4,9 +4,19 @@ Two separate properties are tested here, and they fail in different directions.
 
 **Visibility.** A supervisor may read only non-financial issues whose canonical subject
 resolves unambiguously to a site they were granted. A reconciliation issue names exactly
-one typed subject; only `site` and `work_order` identify a single site. Customer-wide,
-contract-wide, obligation-wide and financial subjects stay hidden, because attributing
-them to one granted site would be a guess.
+one typed subject, and which of the seven resolve to a single site is a fact about the
+schema, not a judgement:
+
+* `site`, `work_order` and `service_obligation` each reach exactly one site through
+  single-valued foreign keys -- an obligation via `contract_site`, which names one site.
+  A supervisor granted that site sees them.
+* `customer` and `contract` reach their sites through multi-valued relations and may
+  cover several, so they stay hidden rather than being attributed by guess.
+* `accounting_invoice` and `accounting_payment` do each resolve to one site, but are
+  deliberately still hidden: a supervisor holds no finance role. That conservatism is
+  asserted below so it cannot drift unnoticed, and is recorded as an open decision.
+
+All seven subject types are represented in the fixture.
 
 **Authority ordering.** Resolution must never let the response distinguish "this issue
 does not exist" from "this issue exists but is not yours to resolve". A 403 that only
@@ -55,13 +65,41 @@ def make_issue(atlas, *, field_group: str, entity_type: str, subject) -> Reconci
 
 @pytest.fixture
 def issues(atlas):  # type: ignore[no-untyped-def]
-    """One issue per subject shape, all in the granted site's blast radius or not."""
+    """One open issue per subject shape, covering all seven typed subjects.
+
+    `granted` in a key means the subject sits at the site the supervisor is granted in
+    these tests (Meridian Business Center); `other` means a different site.
+    """
+    from apps.operations.models import AccountingInvoice, AccountingPayment, ServiceObligation
+
     work_order = atlas.item.work_order
     granted_site = work_order.site
     other_site = (
         Site.objects.filter(organization=atlas.organization).exclude(id=granted_site.id).first()
     )
+
+    obligation_granted = ServiceObligation.objects.filter(
+        organization=atlas.organization, contract_site__site=granted_site
+    ).first()
+    obligation_other = ServiceObligation.objects.filter(
+        organization=atlas.organization, contract_site__site=other_site
+    ).first()
+    invoice_granted = AccountingInvoice.objects.filter(
+        organization=atlas.organization, site=granted_site
+    ).first()
+    payment_granted = AccountingPayment.objects.filter(
+        organization=atlas.organization, accounting_invoice__site=granted_site
+    ).first()
+
+    # Preconditions. An absent fixture object would make a hidden-ness assertion pass for
+    # entirely the wrong reason.
+    assert obligation_granted is not None and obligation_other is not None
+    assert obligation_granted.contract_site.site_id == granted_site.id
+    assert obligation_other.contract_site.site_id == other_site.id
+    assert invoice_granted is not None and payment_granted is not None
+
     return {
+        # --- resolves to exactly one site --------------------------------------------
         "site_granted": make_issue(
             atlas, field_group="completion", entity_type="site", subject=granted_site
         ),
@@ -71,12 +109,39 @@ def issues(atlas):  # type: ignore[no-untyped-def]
         "work_order_granted": make_issue(
             atlas, field_group="schedule_status", entity_type="work_order", subject=work_order
         ),
+        "obligation_granted": make_issue(
+            atlas,
+            field_group="completion",
+            entity_type="service_obligation",
+            subject=obligation_granted,
+        ),
+        "obligation_other": make_issue(
+            atlas,
+            field_group="completion",
+            entity_type="service_obligation",
+            subject=obligation_other,
+        ),
+        # --- reaches several sites, so cannot be attributed to one ---------------------
         "customer_wide": make_issue(
             atlas, field_group="identity", entity_type="customer", subject=work_order.customer
         ),
         "contract_wide": make_issue(
             atlas, field_group="identity", entity_type="contract", subject=work_order.contract
         ),
+        # --- resolves to one site, but is finance's to see -----------------------------
+        "accounting_invoice_operational": make_issue(
+            atlas,
+            field_group="identity",
+            entity_type="accounting_invoice",
+            subject=invoice_granted,
+        ),
+        "accounting_payment_operational": make_issue(
+            atlas,
+            field_group="identity",
+            entity_type="accounting_payment",
+            subject=payment_granted,
+        ),
+        # --- a financial field group, at the granted site -------------------------------
         "financial_on_granted_site": make_issue(
             atlas, field_group="contract_rate", entity_type="site", subject=granted_site
         ),
@@ -117,13 +182,18 @@ class TestSupervisorVisibility:
         assert issues["work_order_granted"].id in visible, (
             "a work order resolves unambiguously to one site and must be visible"
         )
+        assert issues["obligation_granted"].id in visible, (
+            "a service obligation reaches exactly one site through contract_site and must "
+            "be visible to a supervisor granted that site"
+        )
         assert issues["site_other"].id not in visible
-        assert issues["customer_wide"].id not in visible, "customer-wide is not one site"
-        assert issues["contract_wide"].id not in visible, "contract-wide is not one site"
+        assert issues["obligation_other"].id not in visible
+        assert issues["customer_wide"].id not in visible, "a customer may hold many sites"
+        assert issues["contract_wide"].id not in visible, "a contract may cover many sites"
         assert issues["financial_on_granted_site"].id not in visible, (
             "a finance conflict is never a supervisor's, at any site"
         )
-        assert len(visible) == 2
+        assert len(visible) == 3
 
     def test_a_different_grant_reveals_nothing_of_the_first_site(self, atlas, issues) -> None:  # type: ignore[no-untyped-def]
         other = (
@@ -134,18 +204,146 @@ class TestSupervisorVisibility:
         grant(atlas, other)
         visible = self._visible(atlas)
         assert issues["site_other"].id in visible
+        assert issues["obligation_other"].id in visible
         assert issues["site_granted"].id not in visible
         assert issues["work_order_granted"].id not in visible
+        assert issues["obligation_granted"].id not in visible
+
+
+class TestServiceObligationSiteResolution:
+    """A service obligation resolves to exactly one site, so it is scopeable.
+
+    `ServiceObligation.contract_site` is a single foreign key to `ContractSite`, which
+    names one `site`. An obligation therefore belongs to one contract-site period, never
+    to a contract as a whole -- an earlier revision of this module wrongly described it as
+    "obligation-wide" and hid it from every supervisor, which denied a granted supervisor
+    a conflict that was genuinely theirs. These five tests pin the behaviour down.
+    """
+
+    def _visible(self, atlas):  # type: ignore[no-untyped-def]
+        return set(
+            selectors.open_reconciliation_issues_for(atlas.supervisor).values_list("id", flat=True)
+        )
+
+    def test_the_obligation_really_does_resolve_to_one_site(self, atlas, issues) -> None:  # type: ignore[no-untyped-def]
+        """Precondition, asserted rather than assumed: the path is single-valued."""
+        obligation = issues["obligation_granted"].service_obligation
+        assert obligation is not None
+        assert obligation.contract_site.site_id == atlas.item.work_order.site_id
+
+    def test_a_supervisor_granted_the_obligations_site_sees_it(self, atlas, issues) -> None:  # type: ignore[no-untyped-def]
+        grant(atlas, atlas.item.work_order.site)
+        assert issues["obligation_granted"].id in self._visible(atlas)
+
+    def test_a_supervisor_granted_another_site_does_not_see_it(self, atlas, issues) -> None:  # type: ignore[no-untyped-def]
+        other = (
+            Site.objects.filter(organization=atlas.organization)
+            .exclude(id=atlas.item.work_order.site_id)
+            .first()
+        )
+        grant(atlas, other)
+        visible = self._visible(atlas)
+        assert issues["obligation_granted"].id not in visible
+        assert issues["obligation_other"].id in visible, (
+            "non-vacuity: the other site's obligation must be visible to this grant"
+        )
+
+    def test_a_supervisor_with_no_grants_does_not_see_it(self, atlas, issues) -> None:  # type: ignore[no-untyped-def]
+        assert self._visible(atlas) == set()
+
+    @pytest.mark.parametrize("who", ["owner", "ops", "finance", "auditor"])
+    def test_tenant_wide_roles_continue_to_see_it(self, atlas, issues, who) -> None:  # type: ignore[no-untyped-def]
+        visible = set(
+            selectors.open_reconciliation_issues_for(getattr(atlas, who)).values_list(
+                "id", flat=True
+            )
+        )
+        assert issues["obligation_granted"].id in visible
+        assert issues["obligation_other"].id in visible
+
+    def test_a_financial_obligation_issue_stays_hidden_from_a_granted_supervisor(
+        self, atlas
+    ) -> None:  # type: ignore[no-untyped-def]
+        """Site resolution widens the subject, never the finance boundary."""
+        from apps.operations.models import ServiceObligation
+
+        granted_site = atlas.item.work_order.site
+        obligation = ServiceObligation.objects.filter(
+            organization=atlas.organization, contract_site__site=granted_site
+        ).first()
+        financial = make_issue(
+            atlas,
+            field_group="contract_rate",
+            entity_type="service_obligation",
+            subject=obligation,
+        )
+        grant(atlas, granted_site)
+        assert financial.id not in self._visible(atlas)
+
+
+class TestAllSevenSubjectTypesAreCovered:
+    """Requirement 3: the fixture must exercise every typed subject, not a convenient few."""
+
+    def test_the_fixture_represents_every_declared_subject(self, atlas, issues) -> None:  # type: ignore[no-untyped-def]
+        from apps.ingestion.models import TARGET_FIELDS
+
+        represented = {issue.entity_type for issue in issues.values()}
+        assert represented == set(TARGET_FIELDS), (
+            f"missing subject types: {sorted(set(TARGET_FIELDS) - represented)}"
+        )
+
+    def test_each_issue_names_exactly_one_subject(self, atlas, issues) -> None:  # type: ignore[no-untyped-def]
+        from apps.ingestion.models import TARGET_FIELDS
+
+        for key, issue in issues.items():
+            populated = [f for f in TARGET_FIELDS if getattr(issue, f"{f}_id", None) is not None]
+            assert populated == [issue.entity_type], f"{key}: {populated}"
+
+
+class TestAccountingSubjectsRemainHidden:
+    """A recorded conservatism, not a schema limit -- so it cannot drift unnoticed.
+
+    `AccountingInvoice.site` is a single foreign key, and a payment reaches a site through
+    its invoice, so both DO resolve unambiguously to one site. They are nonetheless not
+    matched by the site filter: a supervisor holds no finance role, and an issue whose
+    subject is an accounting record is finance's to see even when its field group is
+    operational. Whether to widen this is an owner decision, recorded in the ledger.
+    """
+
+    def _visible(self, atlas):  # type: ignore[no-untyped-def]
+        return set(
+            selectors.open_reconciliation_issues_for(atlas.supervisor).values_list("id", flat=True)
+        )
+
+    def test_the_paths_would_resolve_if_we_chose_to_use_them(self, atlas, issues) -> None:  # type: ignore[no-untyped-def]
+        """The reason for hiding them is policy, not an inability to scope them."""
+        from apps.ingestion.models import ReconciliationIssue
+
+        site_id = atlas.item.work_order.site_id
+        assert ReconciliationIssue.objects.filter(
+            id=issues["accounting_invoice_operational"].id, accounting_invoice__site_id=site_id
+        ).exists()
+        assert ReconciliationIssue.objects.filter(
+            id=issues["accounting_payment_operational"].id,
+            accounting_payment__accounting_invoice__site_id=site_id,
+        ).exists()
+
+    def test_but_a_granted_supervisor_still_does_not_see_them(self, atlas, issues) -> None:  # type: ignore[no-untyped-def]
+        grant(atlas, atlas.item.work_order.site)
+        visible = self._visible(atlas)
+        assert issues["accounting_invoice_operational"].id not in visible
+        assert issues["accounting_payment_operational"].id not in visible
+        assert issues["obligation_granted"].id in visible, "non-vacuity: scoping does work"
 
 
 class TestTenantWideReadersAreUnchanged:
     """Requirement 2 -- this correction must not narrow anybody else."""
 
     @pytest.mark.parametrize("who", ["owner", "ops", "finance", "auditor"])
-    def test_every_tenant_wide_role_still_sees_all_six(self, atlas, issues, who) -> None:  # type: ignore[no-untyped-def]
+    def test_every_tenant_wide_role_still_sees_every_issue(self, atlas, issues, who) -> None:  # type: ignore[no-untyped-def]
         membership = getattr(atlas, who)
         visible = selectors.open_reconciliation_issues_for(membership)
-        assert visible.count() == len(issues) == 6
+        assert visible.count() == len(issues) == 10
 
 
 class TestEverySurfaceAgrees:
@@ -160,11 +358,11 @@ class TestEverySurfaceAgrees:
     def test_the_badge_count_matches_what_the_queue_lists(self, atlas, issues, client) -> None:  # type: ignore[no-untyped-def]
         grant(atlas, atlas.item.work_order.site)
         imports = self._get(client, "supervisor@atlas.example", reverse("ingestion:import-list"))
-        assert imports.context["open_reconciliation_issues"] == 2
+        assert imports.context["open_reconciliation_issues"] == 3
         queue = self._get(
             client, "supervisor@atlas.example", reverse("ingestion:reconciliation-queue")
         )
-        assert len(list(queue.context["issues"])) == 2
+        assert len(list(queue.context["issues"])) == 3
 
     def test_a_zero_grant_supervisor_sees_zero_on_both(self, atlas, issues, client) -> None:  # type: ignore[no-untyped-def]
         imports = self._get(client, "supervisor@atlas.example", reverse("ingestion:import-list"))
@@ -177,12 +375,12 @@ class TestEverySurfaceAgrees:
         for issue in issues.values():
             assert str(issue.id) not in body
 
-    def test_the_owner_sees_six_on_both(self, atlas, issues, client) -> None:  # type: ignore[no-untyped-def]
+    def test_the_owner_sees_all_ten_on_both(self, atlas, issues, client) -> None:  # type: ignore[no-untyped-def]
         """Non-vacuity control for the two tests above."""
         imports = self._get(client, "owner@atlas.example", reverse("ingestion:import-list"))
-        assert imports.context["open_reconciliation_issues"] == 6
+        assert imports.context["open_reconciliation_issues"] == 10
         queue = self._get(client, "owner@atlas.example", reverse("ingestion:reconciliation-queue"))
-        assert len(list(queue.context["issues"])) == 6
+        assert len(list(queue.context["issues"])) == 10
 
     def test_the_supervisor_is_offered_no_resolve_control(self, atlas, issues, client) -> None:  # type: ignore[no-untyped-def]
         grant(atlas, atlas.item.work_order.site)

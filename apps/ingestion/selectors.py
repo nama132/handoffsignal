@@ -50,17 +50,30 @@ def open_reconciliation_issues(
     Unlike an identity issue -- which by definition names a reference that has NOT
     resolved to a canonical entity, and therefore has no site to be scoped to -- a
     reconciliation issue names exactly one typed canonical subject, enforced by
-    `ck_reconciliation_issue_one_subject`. Two of those seven subjects resolve
-    **unambiguously** to a single site:
+    `ck_reconciliation_issue_one_subject`.
 
-    * ``site``       -- the subject is the site itself;
-    * ``work_order`` -- a work order belongs to exactly one site.
+    Which subjects resolve **unambiguously** to a single site is a question about the
+    schema, not a judgement call:
 
-    The other five (customer, contract, service obligation, accounting invoice,
-    accounting payment) are customer-wide, multi-site, or financial. They cannot be
-    attributed to one granted site, so a site-scoped reader does not see them at all.
-    Guessing which site a customer-wide conflict "really" belongs to is exactly the kind
-    of inference this product refuses to make elsewhere.
+    * ``site``               -- the subject is the site itself;
+    * ``work_order``         -- ``WorkOrder.site`` is a single foreign key;
+    * ``service_obligation`` -- ``ServiceObligation.contract_site`` is a single foreign
+      key to ``ContractSite``, which names exactly one ``site``. An obligation is scoped
+      to one contract-site period, never to a contract as a whole.
+
+    Two subjects genuinely cannot be resolved to one site, and are therefore hidden from
+    a site-scoped reader rather than attributed by guesswork:
+
+    * ``customer`` -- a customer may hold many sites;
+    * ``contract`` -- a contract reaches its sites through the ``ContractSite`` join and
+      may cover several, so the path is multi-valued.
+
+    ``accounting_invoice`` and ``accounting_payment`` DO each resolve to one site
+    (``AccountingInvoice.site``, and a payment through its invoice). They are nonetheless
+    not matched here, which is a deliberate remaining conservatism rather than a schema
+    limit: a supervisor has no finance role, and an issue on an accounting subject is
+    finance's to see. Recorded as an open decision in the execution ledger, and asserted
+    by `tests/test_reconciliation_scope.py` so the behaviour cannot drift unnoticed.
 
     `limit_to_site_ids` follows the three-valued contract: `None` is tenant-wide, a set
     is those sites, and the **empty set is no sites** -- it reaches `__in=[]` verbatim
@@ -77,8 +90,12 @@ def open_reconciliation_issues(
         queryset = queryset.exclude(field_group__in=FINANCIAL_FIELD_GROUPS)
 
     if limit_to_site_ids is not None:
+        # Every branch is a single-valued foreign-key chain, so no row is duplicated and
+        # no subject is matched through a join that could name several sites.
         queryset = queryset.filter(
-            Q(site_id__in=limit_to_site_ids) | Q(work_order__site_id__in=limit_to_site_ids)
+            Q(site_id__in=limit_to_site_ids)
+            | Q(work_order__site_id__in=limit_to_site_ids)
+            | Q(service_obligation__contract_site__site_id__in=limit_to_site_ids)
         )
     return queryset
 
