@@ -1,0 +1,2 @@
+entity_type,alias_source_system,alias_external_id,canonical_source_system,canonical_external_id,match_method,approval_reference,mapping_note
+spaceship,ar_ledger,X-1,contract_register,MERIDIAN-PG,manual,REF-1,

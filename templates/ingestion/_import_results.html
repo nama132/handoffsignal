@@ -1,0 +1,21 @@
+<h1>Result — {{ batch.original_filename }}</h1>
+<dl class="facts">
+  <div class="facts__row"><dt>Status</dt><dd>{{ batch.get_status_display }}</dd></div>
+  <div class="facts__row"><dt>Created</dt><dd>{{ batch.created_count }}</dd></div>
+  <div class="facts__row"><dt>Updated</dt><dd>{{ batch.updated_count }}</dd></div>
+  <div class="facts__row"><dt>Unchanged</dt><dd>{{ batch.unchanged_count }}</dd></div>
+  <div class="facts__row"><dt>Rejected</dt><dd>{{ batch.invalid_row_count }}</dd></div>
+</dl>
+{% if quarantined %}
+  <h2>Quarantined rows</h2>
+  <p class="help">These rows reference records that do not yet resolve to a confirmed
+  mapping. They were not imported, and dependent detection stays blocked until an
+  organization owner confirms the mapping.</p>
+  <ul class="list">
+    {% for row in quarantined %}
+      <li>Row {{ row.row_number }}: {% for error in row.error_codes %}<code>{{ error.code }}</code> {% endfor %}</li>
+    {% endfor %}
+  </ul>
+  <p><a href="{% url 'ingestion:identity-queue' %}">Open the identity-resolution queue</a></p>
+{% endif %}
+<p><a href="{% url 'ingestion:import-list' %}">Back to imports</a></p>

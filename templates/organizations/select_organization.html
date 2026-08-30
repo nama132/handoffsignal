@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Choose an organization — OpsRecovery V2{% endblock %}
+
+{% block content %}
+<div class="card card--narrow">
+  <h1>Choose an organization</h1>
+
+  {% if error %}
+    <div class="alert alert--error" role="alert"><p>{{ error }}</p></div>
+  {% endif %}
+
+  {% if memberships %}
+    <form method="post">
+      {% csrf_token %}
+      <fieldset class="field">
+        <legend>Your organizations</legend>
+        {% for membership in memberships %}
+          <label class="choice">
+            <input type="radio" name="organization_id" value="{{ membership.organization.id }}"
+                   {% if forloop.first %}checked{% endif %}>
+            <span>{{ membership.organization.display_name }}</span>
+          </label>
+        {% endfor %}
+      </fieldset>
+      <button type="submit" class="button">Continue</button>
+    </form>
+  {% else %}
+    <div class="alert alert--info" role="status">
+      <p><strong>You have no active organization membership.</strong>
+      Memberships are created by an organization owner. There is no self-service path.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+# --- secrets and environment (master prompt section 3.1 denylist) ---
+.env
+.env.*
+!.env.example
+CREDENTIALS.md
+CREDENTIALS.txt
+TOOLS_AND_SERVICES.txt
+*.pem
+*.key
+
+# --- local databases / data ---
+*.db
+*.sqlite3
+*.sqlite
+*.dump
+*.sql.gz
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# --- test / quality artifacts ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+pylock.toml
+requirements-audit.txt
+
+# --- uploads, logs, caches, generated demo output ---
+media/
+uploads/
+tmp_imports/
+staticfiles/
+logs/
+*.log
+
+# --- browser automation artifacts (Phase 6/7) ---
+test-results/
+playwright-report/
+.playwright/
+
+# --- editor / OS ---
+.DS_Store
+.idea/
+.vscode/

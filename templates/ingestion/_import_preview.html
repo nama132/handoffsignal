@@ -1,0 +1,59 @@
+<h1>Preview — {{ batch.original_filename }}</h1>
+<div class="alert alert--info" role="status">
+  <p><strong>Nothing has been imported yet.</strong> This preview reads the parsed rows
+  only; no operational record has been created or changed.</p>
+</div>
+
+<dl class="facts">
+  <div class="facts__row"><dt>File type</dt><dd>{{ batch.kind }}</dd></div>
+  <div class="facts__row"><dt>Source</dt><dd>{{ batch.source.system_key }}</dd></div>
+  <div class="facts__row"><dt>Observation mode</dt><dd>{{ batch.get_observation_mode_display }}</dd></div>
+  <div class="facts__row"><dt>Source as of</dt><dd>{{ batch.source_as_of_at }}</dd></div>
+  <div class="facts__row"><dt>Rows</dt><dd>{{ batch.valid_row_count }} valid / {{ batch.total_row_count }} total</dd></div>
+</dl>
+
+<h2>Declared coverage</h2>
+<div class="table-scroll">
+  <table class="table">
+    <thead><tr><th scope="col">Family</th><th scope="col">Scope</th><th scope="col">Interval</th>
+      <th scope="col">Completeness</th><th scope="col">Basis</th></tr></thead>
+    <tbody>
+      {% for row in coverage %}
+        <tr><td>{{ row.record_family }}</td><td>{{ row.get_scope_type_display }}</td>
+          <td>{{ row.coverage_start_at|date:"Y-m-d" }} → {{ row.coverage_end_at|date:"Y-m-d" }}</td>
+          <td>{{ row.get_completeness_display }}</td><td>{{ row.get_declaration_basis_display }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if error_totals %}
+  <h2>Errors</h2>
+  <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th scope="col">Code</th><th scope="col">Rows affected</th></tr></thead>
+      <tbody>{% for code, count in error_totals %}<tr><td>{{ code }}</td><td>{{ count }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  <h3>First invalid rows</h3>
+  <ul class="list">
+    {% for row in invalid_rows %}
+      <li>Row {{ row.row_number }}:
+        {% for error in row.error_codes %}<code>{{ error.code }}</code>{% if error.column %} ({{ error.column }}){% endif %} — {{ error.guidance }}{% if not forloop.last %}; {% endif %}{% endfor %}
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+{% if can_commit %}
+  <form method="post" action="{% url 'ingestion:import-commit' batch.id %}">
+    {% csrf_token %}
+    <p>Committing will create or update {{ batch.valid_row_count }} record(s) in one transaction.</p>
+    <button type="submit" class="button">Commit import</button>
+  </form>
+{% else %}
+  <div class="alert alert--error" role="alert">
+    <p>This file cannot be committed while it contains invalid rows. Correct the file at
+    source and re-import; the whole file promotes together or not at all.</p>
+  </div>
+{% endif %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Foundation status — OpsRecovery V2{% endblock %}
+
+{% block content %}
+<h1>Foundation status</h1>
+
+<div class="alert alert--info" role="status">
+  <p><strong>No business workflow exists yet.</strong> This deployment contains the
+  Phase 1 foundation only: configuration, authentication, health probes, and a
+  custom user model.</p>
+</div>
+
+<section aria-labelledby="built">
+  <h2 id="built">What exists now</h2>
+  <ul class="list">
+    <li>Split settings with startup validation and fail-closed configuration.</li>
+    <li>Custom user model, sign-in, and sign-out.</li>
+    <li>Liveness and readiness probes over PostgreSQL and Redis.</li>
+    <li>Celery application wired to Redis with no registered business task.</li>
+  </ul>
+</section>
+
+<section aria-labelledby="notbuilt">
+  <h2 id="notbuilt">What does not exist yet</h2>
+  <ul class="list">
+    <li>Organizations, memberships, roles, and tenant scoping (Phase 2).</li>
+    <li>CSV import, preview, commit, and identity reconciliation (Phase 3).</li>
+    <li>Detectors, exception cases, and the inbox (Phase 4).</li>
+    <li>Financial snapshots, approvals, and the invoice-ready export (Phase 6).</li>
+  </ul>
+  <p class="help">Route B is in effect: the attendance and quality journeys are
+  deliberately unbuilt and have no placeholder behaviour.</p>
+</section>
+
+<section aria-labelledby="boundary">
+  <h2 id="boundary">Boundary</h2>
+  <dl class="facts">
+    <div class="facts__row"><dt>External actions</dt><dd>Disabled — no provider adapter exists.</dd></div>
+    <div class="facts__row"><dt>Evidence mode</dt><dd>Metadata only — arbitrary upload is rejected.</dd></div>
+    <div class="facts__row"><dt>Environment</dt><dd>{{ app_env }}</dd></div>
+  </dl>
+</section>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Exception inbox — OpsRecovery V2{% endblock %}
+{% block content %}
+<h1>Exception inbox</h1>
+<form method="get" class="filters" aria-label="Filters">
+  <label>State <select name="state"><option value="">any</option>
+    {% for v, l in states %}<option value="{{ v }}" {% if filters.state == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+  <label>Severity <select name="severity"><option value="">any</option>
+    {% for v, l in severities %}<option value="{{ v }}" {% if filters.severity == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+  <button type="submit" class="button button--quiet">Filter</button>
+</form>
+<div class="table-scroll">
+  <table class="table table--dense">
+    <caption class="visually-hidden">Exception cases, most urgent first</caption>
+    <thead><tr><th scope="col">Case</th><th scope="col">Severity</th><th scope="col">State</th>
+      <th scope="col">Site</th><th scope="col">Deadline</th><th scope="col">Freshness</th><th scope="col">Owner</th></tr></thead>
+    <tbody>
+      {% for case in cases %}
+        <tr>
+          <td><a href="{% url 'exceptions:case-detail' case.id %}">{{ case.case_number }}</a><br>
+            <small>{{ case.get_exception_type_display }}</small></td>
+          <td><span class="pill pill--{{ case.severity }}">{{ case.get_severity_display }}</span></td>
+          <td>{{ case.get_state_display }}</td>
+          <td>{{ case.work_order.site.name }}</td>
+          <td>{% if case.deadline_at %}{{ case.deadline_at|date:"Y-m-d" }}{% else %}—{% endif %}</td>
+          <td><span class="pill pill--{{ case.source_freshness_status }}">{{ case.source_freshness_status }}</span></td>
+          <td>{% if case.owner_membership %}{{ case.owner_membership.user.get_full_name }}{% else %}<span class="muted">unassigned</span>{% endif %}</td>
+        </tr>
+      {% empty %}<tr><td colspan="7">No cases match. If imports are committed and identities are resolved, a detector run may not have happened yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

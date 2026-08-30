@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ case.case_number }} — OpsRecovery V2{% endblock %}
+{% block content %}
+<h1>{{ case.case_number }} <span class="pill pill--{{ case.severity }}">{{ case.get_severity_display }}</span></h1>
+<p class="help">{{ case.get_exception_type_display }} &middot; state <strong>{{ case.get_state_display }}</strong>
+  &middot; detected {{ case.detected_at|date:"Y-m-d H:i" }} UTC
+  {% if case.deadline_at %}&middot; deadline {{ case.deadline_at|date:"Y-m-d" }}{% endif %}
+  &middot; version {{ case.version }}</p>
+
+<section aria-labelledby="why"><h2 id="why">Why this was flagged</h2>
+  <p>{{ case.rule_explanation }}</p>
+  <p class="help">Rule <code>{{ case.detector_code }}</code> v{{ case.rule_version }} &middot; source freshness
+    <span class="pill pill--{{ case.source_freshness_status }}">{{ case.source_freshness_status }}</span></p>
+</section>
+
+<section aria-labelledby="wo"><h2 id="wo">Work order</h2>
+  <dl class="facts">
+    <div class="facts__row"><dt>Title</dt><dd>{{ work_order.title }}</dd></div>
+    <div class="facts__row"><dt>Customer / site</dt><dd>{{ work_order.customer.name }} / {{ work_order.site.name }} ({{ work_order.site.timezone }})</dd></div>
+    <div class="facts__row"><dt>Completed</dt><dd>{{ work_order.completed_at|date:"Y-m-d H:i" }} UTC</dd></div>
+    <div class="facts__row"><dt>Authorization</dt><dd>{% if work_order.authorization_required %}required — {{ work_order.authorization_reference|default:"missing" }}{% else %}not required{% endif %}</dd></div>
+    <div class="facts__row"><dt>Contract</dt><dd>{{ work_order.contract.contract_reference }} ({{ work_order.contract.get_status_display }})</dd></div>
+  </dl>
+</section>
+
+<section aria-labelledby="money"><h2 id="money">Financial stage</h2>
+  {% if snapshot %}
+    <dl class="facts">
+      <div class="facts__row"><dt>Candidate value</dt>
+        <dd>{% if candidate_cents is not None %}<strong>${{ candidate_cents }}</strong>{% else %}<strong>manual amount required</strong>{% endif %}
+          <span class="help">— {{ snapshot.get_basis_display }}, calculation <code>{{ snapshot.calculation_code }}</code> v{{ snapshot.calculation_version }}, snapshot v{{ snapshot.snapshot_version }}</span></dd></div>
+      <div class="facts__row"><dt>Invoice-ready</dt><dd><span class="muted">requires finance approval (Phase 6)</span></dd></div>
+      <div class="facts__row"><dt>Invoiced / collected</dt><dd><span class="muted">no accounting confirmation</span></dd></div>
+    </dl>
+    <p class="help">This is a <em>candidate</em> value: contract-supported work that may be billable. It is not
+      recovered revenue, not invoiced, and not collected. The amount comes from the source work order; what
+      this system produced is the absence of a matching invoice.</p>
+  {% else %}<p class="help">No financial snapshot.</p>{% endif %}
+</section>
+
+<section aria-labelledby="next"><h2 id="next">Recommended next action</h2>
+  <p><code>{{ case.recommended_next_action }}</code> — {{ case.recommended_next_action_explanation }}</p>
+</section>
+
+{% if allowed_targets or can_assign %}
+<section aria-labelledby="act"><h2 id="act">Actions</h2>
+  {% if 'acknowledged' in allowed_targets %}
+    <form method="post" action="{% url 'exceptions:acknowledge' case.id %}" class="inline-form">{% csrf_token %}
+      <input type="hidden" name="version" value="{{ case.version }}">
+      <button type="submit" class="button">Acknowledge</button></form>
+  {% endif %}
+  {% if 'action_pending' in allowed_targets or 'escalated' in allowed_targets or 'resolved' in allowed_targets or 'dismissed' in allowed_targets %}
+    <form method="post" action="{% url 'exceptions:transition' case.id %}" class="card">{% csrf_token %}
+      <input type="hidden" name="version" value="{{ case.version }}">
+      <div class="field"><label for="to_state">Move to</label>
+        <select name="to_state" id="to_state">
+          {% for t in allowed_targets %}{% if t != 'acknowledged' %}<option value="{{ t }}">{{ t }}</option>{% endif %}{% endfor %}
+        </select></div>
+      <div class="field"><label for="reason_code">Reason code (resolve / dismiss)</label>
+        <select name="reason_code" id="reason_code"><option value="">—</option>
+          <optgroup label="Resolution">{% for c in resolution_codes %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</optgroup>
+          <optgroup label="Dismissal">{% for c in dismissal_codes %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</optgroup>
+        </select></div>
+      <div class="field"><label for="owner_membership_id">Owner (action pending / escalate)</label>
+        <select name="owner_membership_id" id="owner_membership_id"><option value="">—</option>
+          {% for m in members %}<option value="{{ m.id }}">{{ m.user.get_full_name }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="note">Reason</label><textarea name="note" id="note" rows="2"></textarea></div>
+      <button type="submit" class="button">Apply transition</button>
+    </form>
+  {% endif %}
+  {% if can_assign %}
+    <form method="post" action="{% url 'exceptions:assign-owner' case.id %}" class="inline-form">{% csrf_token %}
+      <input type="hidden" name="version" value="{{ case.version }}">
+      <label>Assign owner <select name="owner_membership_id">{% for m in members %}<option value="{{ m.id }}">{{ m.user.get_full_name }}</option>{% endfor %}</select></label>
+      <button type="submit" class="button button--quiet">Assign</button></form>
+  {% endif %}
+</section>
+{% endif %}
+
+<section aria-labelledby="timeline"><h2 id="timeline">Timeline</h2>
+  <ol class="timeline">
+    {% for e in events %}
+      <li><time>{{ e.occurred_at|date:"Y-m-d H:i:s" }}</time> — <strong>{{ e.event_type }}</strong>
+        {% if e.from_state or e.to_state %}({{ e.from_state|default:"—" }} → {{ e.to_state|default:"—" }}){% endif %}
+        by {% if e.actor_membership %}{{ e.actor_membership.user.get_full_name }}{% else %}<code>{{ e.actor_rule }}</code>{% endif %}
+        {% if e.reason_code %}&middot; <code>{{ e.reason_code }}</code>{% endif %}
+        {% if e.note %}&middot; {{ e.note }}{% endif %} &middot; v{{ e.case_version }}</li>
+    {% endfor %}
+  </ol>
+</section>
+{% endblock %}

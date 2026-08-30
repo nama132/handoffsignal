@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Cockpit — OpsRecovery V2{% endblock %}
+{% block content %}
+<h1>What needs attention now</h1>
+
+<section aria-labelledby="cases-heading">
+  <h2 id="cases-heading">Open cases: {{ open_case_count }}</h2>
+  <dl class="tiles">
+    {% for sev, n in counts_by_severity.items %}
+      <div class="tile tile--{{ sev }}"><dt>{{ sev|capfirst }}</dt><dd>{{ n }}</dd></div>
+    {% endfor %}
+  </dl>
+  <p class="help">Route B builds one exception type — completed but unbilled. Attendance
+  and quality detectors do not exist and are not counted here.</p>
+</section>
+
+<section aria-labelledby="money-heading">
+  <h2 id="money-heading">Financial stages</h2>
+  <p class="help">Four separate facts. They are never added together, and none of them is
+  "recovered revenue".</p>
+  <dl class="tiles">
+    <div class="tile"><dt>Candidate value</dt>
+      <dd>{% if stages.candidate is not None %}${{ stages.candidate }}{% else %}<span class="muted">none</span>{% endif %}</dd>
+      <p class="tile__note">Contract-supported amounts that <em>may</em> be billable</p></div>
+    <div class="tile"><dt>Invoice-ready</dt><dd><span class="muted">not available in this phase</span></dd>
+      <p class="tile__note">Requires finance approval (Phase 6)</p></div>
+    <div class="tile"><dt>Invoiced</dt><dd><span class="muted">not available in this phase</span></dd>
+      <p class="tile__note">Accounting-source confirmation only</p></div>
+    <div class="tile"><dt>Collected</dt><dd><span class="muted">not available in this phase</span></dd>
+      <p class="tile__note">Accounting-source confirmation only</p></div>
+  </dl>
+</section>
+
+<section aria-labelledby="fresh-heading">
+  <h2 id="fresh-heading">Source freshness</h2>
+  <ul class="list">
+    {% for row in freshness %}
+      <li><span class="pill pill--{{ row.status }}">{{ row.status }}</span> {{ row.source.system_key }}
+        {% if row.age_minutes is not None %}— {{ row.age_minutes }} min old{% else %}— never imported{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section aria-labelledby="ops-heading">
+  <h2 id="ops-heading">Operational health</h2>
+  <dl class="facts">
+    <div class="facts__row"><dt>Unresolved identities</dt><dd>{{ unresolved_identities }}{% if unresolved_identities %} — <a href="{% url 'ingestion:identity-queue' %}">blocking detection</a>{% endif %}</dd></div>
+    <div class="facts__row"><dt>Failed detector runs</dt><dd>{{ failed_runs }}</dd></div>
+  </dl>
+  {% if recent_runs %}
+    <div class="table-scroll">
+      <table class="table"><caption class="visually-hidden">Recent detector runs</caption>
+        <thead><tr><th scope="col">Detector</th><th scope="col">Status</th><th scope="col">Scanned</th><th scope="col">Created</th><th scope="col">Skipped</th></tr></thead>
+        <tbody>{% for run in recent_runs %}
+          <tr><td>{{ run.detector_code }} v{{ run.rule_version }}</td><td>{{ run.get_status_display }}</td>
+            <td>{{ run.scanned_count }}</td><td>{{ run.created_count }}</td><td>{{ run.skipped_count }}</td></tr>
+        {% endfor %}</tbody></table>
+    </div>
+  {% endif %}
+</section>
+
+<p><a href="{% url 'exceptions:inbox' %}">Open the exception inbox</a> &middot;
+   <a href="{% url 'ingestion:import-list' %}">Imports</a> &middot;
+   <a href="{% url 'app:organization' %}">Organization</a></p>
+{% endblock %}

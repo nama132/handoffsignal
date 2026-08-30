@@ -1,0 +1,258 @@
+/* OpsRecovery V2 — foundation styles.
+   Accessibility targets (section 30.6): semantic structure, visible focus,
+   sufficient contrast, status never conveyed by colour alone, and no horizontal
+   scrolling on the main action path at 375px. */
+
+:root {
+  --ink: #14181d;
+  --ink-muted: #4a5560;
+  --surface: #ffffff;
+  --page: #f4f6f8;
+  --line: #c9d1d9;
+  --accent: #1f4d7a;
+  --accent-ink: #ffffff;
+  --info-bg: #e8f0f7;
+  --info-line: #1f4d7a;
+  --warn-bg: #fdf3e2;
+  --warn-line: #8a5a00;
+  --error-bg: #fdecec;
+  --error-line: #a11b1b;
+  --radius: 6px;
+  --gap: 1rem;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Keyboard access ------------------------------------------------------- */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 0.6rem 1rem;
+  z-index: 100;
+}
+.skip-link:focus { left: 0; }
+
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Banner ---------------------------------------------------------------- */
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+.banner--demo { background: var(--warn-bg); border-bottom: 2px solid var(--warn-line); }
+.banner__tag {
+  background: var(--warn-line);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 0.1rem 0.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+}
+
+/* Header / footer ------------------------------------------------------- */
+.site-header { background: var(--surface); border-bottom: 1px solid var(--line); }
+.site-header__inner {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.site-header__brand { margin: 0; font-weight: 700; }
+.site-header__env {
+  font-weight: 500;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.05rem 0.4rem;
+  margin-left: 0.35rem;
+}
+.site-header__org { font-weight: 500; margin-left: 0.6rem; color: var(--ink-muted); }
+.site-header__user { color: var(--ink-muted); font-size: 0.9rem; margin-right: 0.5rem; }
+.inline-form { display: inline; }
+
+.site-footer {
+  max-width: 68rem;
+  margin: 2rem auto 3rem;
+  padding: 0 1rem;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+/* Layout ---------------------------------------------------------------- */
+.layout { max-width: 68rem; margin: 0 auto; padding: 1.5rem 1rem; }
+h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+h2 { font-size: 1.15rem; margin: 1.75rem 0 0.5rem; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+}
+.card--narrow { max-width: 26rem; margin: 2rem auto; }
+
+/* Alerts: an icon-free label carries the meaning, not the colour. -------- */
+.alert { border-left: 4px solid; border-radius: var(--radius); padding: 0.85rem 1rem; margin: 1rem 0; }
+.alert p { margin: 0; }
+.alert--info { background: var(--info-bg); border-color: var(--info-line); }
+.alert--error { background: var(--error-bg); border-color: var(--error-line); }
+
+/* Forms ----------------------------------------------------------------- */
+.field { margin-bottom: 1rem; }
+.field label { display: block; font-weight: 600; margin-bottom: 0.3rem; }
+.field input {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 1rem;
+  background: #fff;
+  color: var(--ink);
+}
+
+.button {
+  display: inline-block;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.55rem 1.1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.button--quiet { background: transparent; color: var(--accent); }
+
+/* Content --------------------------------------------------------------- */
+.list { margin: 0.5rem 0; padding-left: 1.2rem; }
+.list li { margin-bottom: 0.3rem; }
+.help { color: var(--ink-muted); font-size: 0.9rem; }
+.messages { list-style: none; padding: 0; margin: 0 0 1rem; }
+.message {
+  background: var(--info-bg);
+  border-left: 4px solid var(--info-line);
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+}
+
+.facts { margin: 0.5rem 0; }
+.facts__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.facts dt { font-weight: 600; min-width: 11rem; margin: 0; }
+.facts dd { margin: 0; color: var(--ink-muted); }
+
+/* 375px viewport: stack the header and definition rows, never scroll sideways. */
+@media (max-width: 30rem) {
+  .site-header__inner { flex-direction: column; align-items: flex-start; }
+  .facts__row { flex-direction: column; gap: 0.15rem; }
+  .facts dt { min-width: 0; }
+  .layout { padding: 1rem 0.85rem; }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8edf2;
+    --ink-muted: #a9b4bf;
+    --surface: #1b2027;
+    --page: #12161b;
+    --line: #39424c;
+    --accent: #7fb3e0;
+    --accent-ink: #10151a;
+    --info-bg: #172733;
+    --warn-bg: #302510;
+    --error-bg: #33191a;
+  }
+  .field input { background: #12161b; color: var(--ink); }
+  .banner__tag { color: #12161b; }
+}
+
+/* Tables and choices (Phase 2) ------------------------------------------ */
+.table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; background: var(--surface); }
+.table th, .table td {
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+.table thead th { background: var(--page); font-weight: 600; }
+.choice { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+code { background: var(--page); padding: 0.05rem 0.3rem; border-radius: 3px; font-size: 0.9em; }
+/* Dense tables scroll inside their own container rather than the page. */
+@media (max-width: 30rem) {
+  section > .table { display: block; overflow-x: auto; }
+}
+
+/* Ingestion (Phase 3) ---------------------------------------------------- */
+.pill {
+  display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px;
+  font-size: 0.8rem; font-weight: 600; border: 1px solid var(--line);
+}
+.pill--fresh { background: var(--info-bg); border-color: var(--info-line); }
+.pill--aging { background: var(--warn-bg); border-color: var(--warn-line); }
+.pill--stale { background: var(--error-bg); border-color: var(--error-line); }
+.pill--unknown { background: var(--page); }
+.field__error { color: var(--error-line); font-size: 0.9rem; margin: 0.25rem 0 0; }
+.field select, .field textarea {
+  width: 100%; padding: 0.5rem; border: 1px solid var(--line);
+  border-radius: var(--radius); font-size: 1rem; background: #fff; color: var(--ink);
+}
+@media (prefers-color-scheme: dark) { .field select, .field textarea { background: #12161b; color: var(--ink); } }
+
+/* Exceptions (Phase 4) --------------------------------------------------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem; margin: 0.5rem 0; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.75rem; }
+.tile dt { font-size: 0.85rem; color: var(--ink-muted); margin: 0; }
+.tile dd { font-size: 1.5rem; font-weight: 700; margin: 0.15rem 0 0; }
+.tile__note { font-size: 0.8rem; color: var(--ink-muted); margin: 0.25rem 0 0; }
+.tile--critical, .tile--high { border-left: 4px solid var(--error-line); }
+.tile--medium { border-left: 4px solid var(--warn-line); }
+.tile--low { border-left: 4px solid var(--info-line); }
+.pill--critical, .pill--high { background: var(--error-bg); border-color: var(--error-line); }
+.pill--medium { background: var(--warn-bg); border-color: var(--warn-line); }
+.pill--low { background: var(--info-bg); border-color: var(--info-line); }
+.muted { color: var(--ink-muted); font-weight: 400; font-size: 0.9rem; }
+.filters { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-bottom: 0.75rem; }
+.timeline { padding-left: 1.2rem; }
+.timeline li { margin-bottom: 0.4rem; }
+.timeline time { color: var(--ink-muted); font-size: 0.85rem; }
+
+/* Recovery ledger (Phase 6) ---------------------------------------------- */
+/* Wide tables scroll inside their own container so the page itself never does
+   (section 33.3: no blocking overflow at 375px). Only the dense operational tables
+   need the floor; a three-column table sizes itself. */
+.table-scroll { overflow-x: auto; }
+.table-scroll .table--dense { min-width: 52rem; }
+details summary { cursor: pointer; font-size: 0.85rem; color: var(--accent); }
+details .list { margin: 0.35rem 0 0; font-size: 0.85rem; }
+.button[disabled] { opacity: 0.5; cursor: not-allowed; }

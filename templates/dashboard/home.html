@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ organization.display_name }} — OpsRecovery V2{% endblock %}
+
+{% block content %}
+<h1>{{ organization.display_name }}</h1>
+<p class="help">Signed in as {{ membership.user.get_full_name }} &middot;
+  roles: {% for role in active_roles %}<code>{{ role }}</code>{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}
+  &middot; timezone {{ organization.default_timezone }}</p>
+
+<p class="help">Organization overview: customers, sites, and your permissions here.
+  Operational work lives on the <a href="{% url 'app:home' %}">cockpit</a>,
+  <a href="{% url 'exceptions:inbox' %}">inbox</a>, and <a href="{% url 'ingestion:import-list' %}">imports</a>.</p>
+
+{% if site_scope_is_limited %}
+  <div class="alert alert--info" role="status">
+    <p><strong>Site-limited view.</strong> You are a site supervisor, so this page shows
+    only the {{ granted_site_count }} site{{ granted_site_count|pluralize }} explicitly
+    granted to you — not the whole organization.</p>
+  </div>
+{% endif %}
+
+<section aria-labelledby="customers-heading">
+  <h2 id="customers-heading">Customers ({{ customers|length }})</h2>
+  {% if customers %}
+    <div class="table-scroll">
+      <table class="table">
+        <caption class="visually-hidden">Customers in {{ organization.display_name }}</caption>
+        <thead><tr><th scope="col">Name</th><th scope="col">Status</th></tr></thead>
+        <tbody>
+          {% for customer in customers %}
+            <tr><td>{{ customer.name }}</td><td>{{ customer.get_status_display }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="help">No customers yet.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="sites-heading">
+  <h2 id="sites-heading">Sites ({{ sites|length }})</h2>
+  {% if sites %}
+    <div class="table-scroll">
+      <table class="table">
+        <caption class="visually-hidden">Sites in {{ organization.display_name }}</caption>
+        <thead>
+          <tr><th scope="col">Site</th><th scope="col">Customer</th>
+              <th scope="col">Type</th><th scope="col">Timezone</th></tr>
+        </thead>
+        <tbody>
+          {% for site in sites %}
+            <tr>
+              <td>{{ site.name }}</td><td>{{ site.customer.name }}</td>
+              <td>{{ site.get_site_type_display }}</td><td>{{ site.timezone }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="help">No sites yet.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="permissions-heading">
+  <h2 id="permissions-heading">Your permissions here</h2>
+  <dl class="facts">
+    <div class="facts__row"><dt>Manage memberships and roles</dt>
+      <dd>{% if can_manage_memberships %}Permitted{% else %}Not permitted{% endif %}</dd></div>
+    <div class="facts__row"><dt>Manage data sources</dt>
+      <dd>{% if can_manage_sources %}Permitted{% else %}Not permitted{% endif %}</dd></div>
+    <div class="facts__row"><dt>Confirm or reject an identity mapping</dt>
+      <dd>{% if can_resolve_identity %}Permitted{% else %}Not permitted{% endif %}</dd></div>
+    <div class="facts__row"><dt>Explicit site grants</dt>
+      <dd>{{ granted_site_count }}{% if granted_site_count == 0 %} — a supervisor with no grants reaches no site{% endif %}</dd></div>
+  </dl>
+  <p class="help">Permissions shown here are read from the same policy the server
+  enforces on every request; hiding a control never replaces that check.</p>
+</section>
+{% endblock %}

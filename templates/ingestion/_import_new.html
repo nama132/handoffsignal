@@ -1,0 +1,23 @@
+<h1>Import a file</h1>
+<div class="alert alert--info" role="status">
+  <p>You must declare what this file covers. Completeness is never inferred from the
+  filename, the row count, or how recent the file is — only an explicit declaration from
+  an authoritative snapshot can later support a "nothing was found" conclusion.</p>
+</div>
+<form method="post" enctype="multipart/form-data" class="card">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="alert alert--error" role="alert">
+      {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+    </div>
+  {% endif %}
+  {% for field in form %}
+    <div class="field">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}
+      {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+    </div>
+  {% endfor %}
+  <button type="submit" class="button">Upload and preview</button>
+</form>

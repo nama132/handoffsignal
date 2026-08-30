@@ -1,0 +1,54 @@
+# Local development dependencies for OpsRecovery V2.
+#
+# Isolation notes:
+#  - Ports are deliberately non-default (5433 / 6380) so this stack cannot collide
+#    with any other local PostgreSQL or Redis, including anything used by V1.
+#  - Credentials here are local-development-only and are not secrets.
+#  - Image tags are pinned. `latest` is rejected: docker-library already publishes
+#    PostgreSQL 19 beta tags, so `latest` will move without warning.
+#
+# PostgreSQL 18 changed its data layout: PGDATA is /var/lib/postgresql/18/docker and
+# the image's VOLUME is /var/lib/postgresql. Mounting at the pre-18 path
+# (/var/lib/postgresql/data) silently fails to persist the cluster.
+
+name: ops-recovery-v2
+
+services:
+  db:
+    image: postgres:18.6-trixie
+    container_name: opsrecovery-v2-db
+    environment:
+      POSTGRES_DB: opsrecovery_v2
+      POSTGRES_USER: opsrecovery
+      POSTGRES_PASSWORD: local-dev-only
+      # scram-sha-256 is the image default in 18; stated explicitly for review.
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - v2_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opsrecovery -d opsrecovery_v2"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.10-alpine
+    container_name: opsrecovery-v2-redis
+    # Celery raises InconsistencyError if its broker keys are evicted, so the
+    # eviction policy is stated rather than inherited.
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--save", ""]
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  v2_pgdata:
+    name: ops_recovery_v2_pgdata

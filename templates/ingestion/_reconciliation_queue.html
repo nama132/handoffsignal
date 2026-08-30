@@ -1,0 +1,33 @@
+<h1>Reconciliation</h1>
+<h2>Open conflicts</h2>
+<div class="table-scroll">
+  <table class="table">
+    <thead><tr><th scope="col">Entity</th><th scope="col">Field group</th>
+      <th scope="col">Blocking</th><th scope="col">Explanation</th></tr></thead>
+    <tbody>
+      {% for issue in issues %}
+        <tr><td>{{ issue.get_entity_type_display }}</td><td>{{ issue.get_field_group_display }}</td>
+          <td>{% if issue.is_blocking %}yes{% else %}no{% endif %}</td>
+          <td>{{ issue.explanation }}</td></tr>
+      {% empty %}<tr><td colspan="4">No open conflicts.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Reconciliation runs</h2>
+<p class="help">A run becomes ready only when every required input is committed, all
+identities resolve, and no blocking conflict remains. No detector exists yet, so a ready
+run schedules nothing in this phase.</p>
+<div class="table-scroll">
+  <table class="table">
+    <thead><tr><th scope="col">Run</th><th scope="col">As of</th>
+      <th scope="col">Status</th><th scope="col">Inputs</th></tr></thead>
+    <tbody>
+      {% for run in runs %}
+        <tr><td>{{ run.run_key }}</td><td>{{ run.as_of|date:"Y-m-d H:i" }}</td>
+          <td>{{ run.get_status_display }}</td>
+          <td>{% for input in run.inputs.all %}{{ input.domain }}{% if input.is_satisfied %} ✓{% else %} …{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>
+      {% empty %}<tr><td colspan="4">No runs yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>

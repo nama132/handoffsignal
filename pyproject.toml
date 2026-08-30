@@ -1,0 +1,111 @@
+[project]
+name = "ops-recovery-v2"
+version = "0.1.0"
+description = "OpsRecovery V2 — commercial-cleaning operational exception and revenue-recovery engine (synthetic demo)"
+requires-python = ">=3.13,<3.14"
+
+# Direct dependencies are pinned deliberately (master prompt section 13).
+# uv.lock fixes the exact resolved versions; these ranges express intent.
+dependencies = [
+    # Django 5.2 LTS. >=5.2.17 required: that release fixed four CVEs.
+    "django>=5.2.17,<5.3",
+    # psycopg 3.3+ required for PostgreSQL 18 libpq support (Django's own floor of
+    # 3.1.8 predates PostgreSQL 18). [binary] ships prebuilt wheels with a bundled
+    # libpq; [c] is avoided because psycopg-c 3.3.4 is sdist-only and does not build
+    # against Cython 3.3.
+    "psycopg[binary]>=3.3,<3.4",
+    # Celery 5.6.3+ fixes "worker fails to reconnect after redis failover".
+    # NOTE: redis-py is deliberately NOT a direct dependency. kombu 5.6.2 caps it at
+    # <6.5; adding an explicit redis pin makes the resolution unsolvable.
+    "celery[redis]>=5.6.3,<5.7",
+    "gunicorn>=26.2,<27",
+    # whitenoise 6.12.0 contains a security fix for autorefresh mode.
+    "whitenoise>=6.12,<7",
+]
+
+[dependency-groups]
+browser = [
+    "pytest-playwright>=0.7,<0.8",
+]
+dev = [
+    "pytest>=9.1,<10",
+    "pytest-django>=4.14,<5",
+    "pytest-cov>=7.1,<8",
+    "factory-boy>=3.3.3,<4",
+    "coverage>=7.15,<8",
+    "ruff>=0.16.4,<0.17",
+    # compatible-mypy pins mypy to the range django-stubs supports, so a future
+    # mypy release cannot silently break the plugin.
+    "django-stubs[compatible-mypy]>=6.1,<7",
+    "pip-audit>=2.10,<3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["apps", "config"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+# "I" enables import sorting: `ruff format` alone does NOT sort imports.
+select = ["E", "F", "I", "UP", "B", "C4", "DJ", "S", "T20"]
+ignore = [
+    "S101",  # assert — used legitimately by pytest
+    "E501",  # line length is enforced by the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+# S603/S607: the production-settings tests deliberately spawn a subprocess with
+# sys.executable and a module-level constant snippet. No untrusted input is involved.
+"tests/*" = ["S105", "S106", "S311", "S603", "S607"]
+"config/settings/*" = ["F403", "F405"]
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.13"
+plugins = ["mypy_django_plugin.main"]
+strict_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+exclude = ["migrations/"]
+
+# celery does not ship a py.typed marker or stubs.
+[[tool.mypy.overrides]]
+module = ["celery.*"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"
+
+# ---------------------------------------------------------------- pytest
+# pytest 9 reads native TOML from [tool.pytest] (7.x/8.x used [tool.pytest.ini_options]).
+[tool.pytest]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "-ra"]
+markers = [
+    "worker_integration: requires a live Celery worker on an isolated queue (run via `make test-worker-integration`)",
+    "browser: Playwright journey against a live server (run `uv run playwright install chromium` first)",
+]
+filterwarnings = ["error::DeprecationWarning:apps.*", "error::DeprecationWarning:config.*"]
+
+# ---------------------------------------------------------------- coverage
+[tool.coverage.run]
+branch = true
+source = ["apps", "config"]
+omit = ["*/migrations/*", "*/tests/*", "config/asgi.py", "config/wsgi.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

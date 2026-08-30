@@ -1,0 +1,22 @@
+<h1>Identity resolution</h1>
+<p class="help">Different source systems do not share identifiers. A reference resolves
+only through a mapping a person has confirmed — never by name similarity.</p>
+{% if not can_resolve %}
+  <div class="alert alert--info" role="status">
+    <p>Confirming an identity crosses the operational/financial boundary, so only an
+    organization owner may do it. You can review the queue here.</p>
+  </div>
+{% endif %}
+<div class="table-scroll">
+  <table class="table">
+    <thead><tr><th scope="col">Entity</th><th scope="col">Source</th>
+      <th scope="col">Identifier</th><th scope="col">Reason</th></tr></thead>
+    <tbody>
+      {% for issue in issues %}
+        <tr><td>{{ issue.get_entity_type_display }}</td><td>{{ issue.supplied_source.system_key }}</td>
+          <td><code>{{ issue.supplied_external_id }}</code></td>
+          <td>{{ issue.get_reason_code_display }}</td></tr>
+      {% empty %}<tr><td colspan="4">No unresolved references.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>

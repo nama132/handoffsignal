@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Recovery ledger — OpsRecovery V2{% endblock %}
+{% block content %}
+<h1>Recovery ledger</h1>
+
+<div class="alert alert--info" role="status">
+  <p><strong>Four separate facts, never a single total.</strong> Candidate is what the
+  contract supports; invoice-ready is what a reviewer approved; invoiced and collected
+  come only from your accounting source. They are not stages of one number and are never
+  added together.</p>
+</div>
+
+<section aria-labelledby="totals-heading">
+  <h2 id="totals-heading">Stage totals</h2>
+  <dl class="tiles">
+    <div class="tile"><dt>Candidate value</dt>
+      <dd>{% if totals.candidate is not None %}${{ totals.candidate }}{% else %}<span class="muted">none</span>{% endif %}</dd>
+      <p class="tile__note">May be billable. Not recovered revenue.</p></div>
+    <div class="tile"><dt>Invoice-ready value</dt>
+      <dd>{% if totals.invoice_ready is not None %}${{ totals.invoice_ready }}{% else %}<span class="muted">none</span>{% endif %}</dd>
+      <p class="tile__note">Reviewed and approved for handoff.</p></div>
+    <div class="tile"><dt>Confirmed invoiced</dt>
+      <dd>{% if totals.invoiced is not None %}${{ totals.invoiced }}{% else %}<span class="muted">none</span>{% endif %}</dd>
+      <p class="tile__note">From the accounting source only.</p></div>
+    <div class="tile"><dt>Confirmed collected</dt>
+      <dd>{% if totals.collected is not None %}${{ totals.collected }}{% else %}<span class="muted">none</span>{% endif %}</dd>
+      <p class="tile__note">From the accounting source only.</p></div>
+  </dl>
+  {% if totals.mixed_currency %}
+    <p class="help"><strong>More than one currency is present.</strong> The stage totals are
+    withheld because adding different currencies together would produce a number that means
+    nothing. The per-item values below remain exact.</p>
+  {% endif %}
+  {% if totals.disputed_excluded %}
+    <p class="help"><strong>{{ totals.disputed_excluded }}</strong> item(s) excluded from the
+    confirmed columns because a dispute is open. See the reason in the table below.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="items-heading">
+  <h2 id="items-heading">Items</h2>
+  <div class="table-scroll">
+    <table class="table table--dense">
+      <caption class="visually-hidden">Recovery items, one row per work order</caption>
+      <thead>
+        <tr>
+          <th scope="col">Case</th><th scope="col">Site</th><th scope="col">Basis</th>
+          <th scope="col">Candidate</th><th scope="col">Invoice-ready</th>
+          <th scope="col">Invoiced</th><th scope="col">Collected</th>
+          <th scope="col">Evidence</th><th scope="col">Status</th><th scope="col">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td><a href="{% url 'exceptions:case-detail' row.case.id %}">{{ row.case.case_number }}</a></td>
+            <td>{{ row.item.work_order.site.name }}</td>
+            <td>{{ row.basis }}</td>
+            <td>{% if row.candidate is not None %}${{ row.candidate }}{% else %}<span class="muted">manual</span>{% endif %}</td>
+            <td>{% if row.invoice_ready is not None %}${{ row.invoice_ready }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>{% if row.invoiced is not None %}${{ row.invoiced }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>{% if row.collected is not None %}${{ row.collected }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>
+              {% if row.missing_count == 0 %}
+                <span class="pill pill--fresh">complete</span>
+              {% else %}
+                <span class="pill pill--stale">{{ row.missing_count }} missing</span>
+                <details><summary>which</summary>
+                  <ul class="list">{% for label in row.missing_labels %}<li>{{ label }}</li>{% endfor %}</ul>
+                </details>
+              {% endif %}
+            </td>
+            <td>
+              {{ row.item.get_workflow_state_display }}
+              {% if row.item.dispute_status == 'open' %}
+                <br><span class="pill pill--stale">dispute: {{ row.item.dispute_reason }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if can_approve and row.can_approve %}
+                <form method="post" action="{% url 'recovery:approve-invoice-ready' row.item.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="version" value="{{ row.item.version }}">
+                  <button type="submit" class="button">Approve invoice-ready</button>
+                </form>
+              {% elif can_approve and row.missing_count %}
+                <span class="muted">blocked by evidence</span>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="10">No recovery items yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if can_export %}
+<section aria-labelledby="export-heading">
+  <h2 id="export-heading">Export</h2>
+  <p class="help">Exports the approved, undisputed items as a CSV a bookkeeper can raise
+  the invoice from in your own system. <strong>No invoice is created and nothing is
+  sent.</strong></p>
+  <form method="post" action="{% url 'recovery:export' %}">
+    {% for item in exportable %}<input type="hidden" name="item_id" value="{{ item.id }}">{% endfor %}
+    {% csrf_token %}
+    <button type="submit" class="button" {% if not exportable %}disabled{% endif %}>
+      Export {{ exportable|length }} approved item(s)
+    </button>
+  </form>
+  {% if exports %}
+    <h3>Previous exports</h3>
+    <ul class="list">
+      {% for export in exports %}
+        <li><a href="{% url 'recovery:export-download' export.id %}">{{ export.filename }}</a>
+          — {{ export.row_count }} row(s), ${{ export.total_invoice_ready_value }} invoice-ready,
+          by {{ export.created_by.user.get_full_name }} on {{ export.created_at|date:"Y-m-d H:i" }}
+          {% if export.superseded_note %}<br><span class="pill pill--stale">superseded</span> {{ export.superseded_note }}{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,51 @@
+<h1>Imports</h1>
+<p class="help">Source systems stay authoritative. Importing copies observations into
+OpsRecovery; it never writes back.</p>
+
+<section aria-labelledby="freshness-heading">
+  <h2 id="freshness-heading">Source freshness</h2>
+  <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th scope="col">Source</th><th scope="col">Domain</th>
+        <th scope="col">Status</th><th scope="col">Age</th><th scope="col">Authoritative</th></tr></thead>
+      <tbody>
+        {% for row in freshness %}
+          <tr>
+            <td>{{ row.source.system_key }}</td>
+            <td>{{ row.source.get_domain_display }}</td>
+            <td><span class="pill pill--{{ row.status }}">{{ row.status }}</span></td>
+            <td>{% if row.age_minutes is None %}never imported{% else %}{{ row.age_minutes }} min{% endif %}</td>
+            <td>{% if row.source.is_authoritative %}yes{% else %}no{% endif %}</td>
+          </tr>
+        {% empty %}<tr><td colspan="5">No sources configured.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p>
+  <a href="{% url 'ingestion:import-new' %}">Import a file</a> &middot;
+  <a href="{% url 'ingestion:identity-queue' %}">Identity resolution ({{ open_identity_issues }})</a> &middot;
+  <a href="{% url 'ingestion:reconciliation-queue' %}">Reconciliation issues ({{ open_reconciliation_issues }})</a>
+</p>
+
+<section aria-labelledby="history-heading">
+  <h2 id="history-heading">History</h2>
+  <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th scope="col">File</th><th scope="col">Type</th><th scope="col">Source</th>
+        <th scope="col">Status</th><th scope="col">Rows</th><th scope="col">Result</th></tr></thead>
+      <tbody>
+        {% for batch in batches %}
+          <tr>
+            <td><a href="{% url 'ingestion:import-results' batch.id %}">{{ batch.original_filename }}</a></td>
+            <td>{{ batch.kind }}</td><td>{{ batch.source.system_key }}</td>
+            <td>{{ batch.get_status_display }}</td>
+            <td>{{ batch.valid_row_count }}/{{ batch.total_row_count }}</td>
+            <td>{% if batch.is_committed %}+{{ batch.created_count }} ~{{ batch.updated_count }} ={{ batch.unchanged_count }}{% else %}—{% endif %}</td>
+          </tr>
+        {% empty %}<tr><td colspan="6">Nothing imported yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
