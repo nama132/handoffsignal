@@ -8,6 +8,12 @@ TOOLS_AND_SERVICES.txt
 *.pem
 *.key
 
+# --- owner-excluded from version control ---
+# The governing specification is deliberately kept out of the repository at the owner's
+# direction (Phase 1B). It stays present in the working tree; this rule exists so a blind
+# `git add .` can never sweep it into permanent history.
+CLAUDE_V2_COMMERCIAL_CLEANING_MASTER_PROMPT.md
+
 # --- local databases / data ---
 *.db
 *.sqlite3
