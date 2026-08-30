@@ -68,12 +68,22 @@ def open_reconciliation_issues(
     * ``contract`` -- a contract reaches its sites through the ``ContractSite`` join and
       may cover several, so the path is multi-valued.
 
-    ``accounting_invoice`` and ``accounting_payment`` DO each resolve to one site
-    (``AccountingInvoice.site``, and a payment through its invoice). They are nonetheless
-    not matched here, which is a deliberate remaining conservatism rather than a schema
-    limit: a supervisor has no finance role, and an issue on an accounting subject is
-    finance's to see. Recorded as an open decision in the execution ledger, and asserted
-    by `tests/test_reconciliation_scope.py` so the behaviour cannot drift unnoticed.
+    ``accounting_invoice`` and ``accounting_payment`` are deliberately NOT matched here,
+    and this is a **settled product-policy boundary**, not an open question and not a
+    limitation waiting to be lifted.
+
+    Both do have unambiguous site paths (``AccountingInvoice.site``, and a payment through
+    its invoice), so the reason they are excluded has nothing to do with whether they can
+    be resolved. An accounting record is finance-domain by virtue of what it is. It stays
+    finance-only **regardless of an operational-looking ``field_group``**: a conflict whose
+    subject is an invoice or a payment does not become a supervisor's to see because its
+    field group happens to read ``identity``. The domain of the subject decides, not the
+    domain of the field group.
+
+    Do not add branches for these two. `TestAccountingSubjectsRemainHidden` in
+    `tests/test_reconciliation_scope.py` asserts both halves -- that the paths would
+    resolve, and that a granted supervisor still does not see them -- so the boundary
+    cannot erode by accident.
 
     `limit_to_site_ids` follows the three-valued contract: `None` is tenant-wide, a set
     is those sites, and the **empty set is no sites** -- it reaches `__in=[]` verbatim

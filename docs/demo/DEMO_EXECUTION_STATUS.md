@@ -64,11 +64,20 @@ clarification had always applied.
 | `SITE_SCOPED_ACTIONS` claimed an enforcement that did not exist | `RESOLVE_OPERATIONAL_RECONCILIATION` removed — `ACTION_ROLES` never granted it to a supervisor, so the site branch was unreachable and the entry was a lie in the matrix. No new mutation authority was granted to supervisors. `ACT_ON_CASE` stays, documented as the contract for the unbuilt operational journeys. |
 | The Phase 2 money assertions were brittle | They searched the whole page for the digits `480`, which the freshness panel's elapsed age (now past 14808) contains. Every money assertion now parses a **named stage** out of the financial section and compares the exact token `$480.00`. A decoy test proves the old check would have been fooled and the new one is not. |
 
+## Settled product-policy boundaries
+
+Decided by the owner. These are **not** open questions, and they are not deferred work.
+Recording them here so a later reviewer does not reopen a decision that has already been
+made.
+
+| Boundary | The decision |
+| --- | --- |
+| Accounting-record subjects are finance-only | `accounting_invoice` and `accounting_payment` reconciliation issues are never visible to a supervisor, at any site scope. Both subjects do have unambiguous site paths, so this is a policy boundary rather than a schema limit — and it holds **regardless of an operational-looking `field_group`**. An accounting record is finance-domain by virtue of what it is; a conflict on an invoice does not become operational because its field group reads `identity`. No selector branch is to be added for either. `TestAccountingSubjectsRemainHidden` asserts both that the paths would resolve and that a granted supervisor still does not see them, so the boundary cannot erode by accident. |
+
 ## Explicitly deferred, not closed
 
 | Finding | Why it is deferred |
 | --- | --- |
-| `accounting_invoice` and `accounting_payment` subjects stay hidden from supervisors | Both **do** resolve to exactly one site (`AccountingInvoice.site`; a payment through its invoice), so this is policy, not a schema limit. They remain unmatched because a supervisor holds no finance role and an issue on an accounting record is finance's to see even when its field group is operational. Widening this is an owner decision. Asserted in `TestAccountingSubjectsRemainHidden` so it cannot drift unnoticed. |
 | `ACT_ON_CASE` site scoping is declared but unenforced | No call site passes `site_id`, and `transitions._roles_for` never returns SUPERVISOR for a revenue case. It is the contract for Journeys A and C, which are unbuilt. Enforcing it now would be writing authorization for a journey that does not exist. |
 | Tenant-health visibility for a site-scoped reader | Source freshness, import batch history, identity-issue counts and detector-run status remain organization-wide for every role. Whether a supervisor should see tenant pipeline metadata at all is a product question, deliberately left open. |
 | The member roster on case detail | `apps/exceptions/views.py` supplies the full organization membership list to the assign-owner control. It is people, not site business data. Untouched. |
